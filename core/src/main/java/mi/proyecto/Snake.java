@@ -1,5 +1,7 @@
 package mi.proyecto;
 
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.Color;
@@ -7,21 +9,36 @@ import com.badlogic.gdx.graphics.Color;
 public class Snake {
     private float x, y;
     private float size;
+    private float speed;
     private ShapeRenderer shapeRenderer;
 
     public Snake() {
         x = 100;
         y = 100;
         size = 20;
+        speed = 100; // pixeles por segundo
         shapeRenderer = new ShapeRenderer();
     }
 
     public void update() {
-        // por ahora la serpiente no se mueve, después agregamos controles
+        // Tiempo delta para movimiento suave (independiente de los FPS)
+        float delta = Gdx.graphics.getDeltaTime();
+
+        if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
+            y += speed * delta;
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
+            y -= speed * delta;
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+            x -= speed * delta;
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+            x += speed * delta;
+        }
     }
 
     public void draw(SpriteBatch batch) {
-        // Como ShapeRenderer no usa SpriteBatch, lo dibujamos aparte
         batch.end();
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);

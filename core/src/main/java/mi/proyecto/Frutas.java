@@ -9,12 +9,12 @@ public class Frutas {
 
     public Frutas() {
         texture = new Texture("Fruta.png"); // tu imagen de fruta
-        x = 200;
-        y = 200;
+        x = 20;
+        y = 20;
     }
 
     public void draw(SpriteBatch batch) {
-        batch.draw(texture, x, y);
+        batch.draw(texture, x, y, 20, 20);
     }
 
     public void dispose() {
