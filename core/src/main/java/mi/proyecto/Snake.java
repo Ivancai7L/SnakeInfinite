@@ -21,21 +21,19 @@ public class Snake {
     }
 
     public void update() {
-        // Tiempo delta para movimiento suave (independiente de los FPS)
+
         float delta = Gdx.graphics.getDeltaTime();
 
         if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
             y += speed * delta;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
             y -= speed * delta;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
             x -= speed * delta;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+        } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
             x += speed * delta;
         }
+
     }
 
     public void draw(SpriteBatch batch) {
