@@ -10,12 +10,14 @@ public class JuegoScreen implements Screen {
     private SpriteBatch batch;
     private Snake snake;
     private Frutas frutas;
+    private int puntaje;
 
     public JuegoScreen(MiJuegoPrincipal game) {
         this.game = game;
         batch = new SpriteBatch();
         snake = new Snake();
         frutas = new Frutas();
+        puntaje = 0;
     }
 
     @Override
@@ -28,23 +30,37 @@ public class JuegoScreen implements Screen {
         Gdx.gl.glClearColor(0, 0.3f, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
+        if (colisionaConFruta()) {
+            frutas.regenerar();
+            puntaje++;
+            System.out.println("Puntaje: " + puntaje);
+        }
+
         batch.begin();
         snake.draw(batch);
         frutas.draw(batch);
         batch.end();
     }
 
-    @Override
-    public void resize(int width, int height) { }
+    private boolean colisionaConFruta() {
+        float snakeX = snake.getX();
+        float snakeY = snake.getY();
+        float snakeSize = snake.getSize();
+        float fruitX = frutas.getX();
+        float fruitY = frutas.getY();
+        float fruitSize = frutas.getSize();
 
-    @Override
-    public void pause() { }
+        // Colisión simple tipo AABB
+        return snakeX < fruitX + fruitSize &&
+            snakeX + snakeSize > fruitX &&
+            snakeY < fruitY + fruitSize &&
+            snakeY + snakeSize > fruitY;
+    }
 
-    @Override
-    public void resume() { }
-
-    @Override
-    public void hide() { }
+    @Override public void resize(int width, int height) { }
+    @Override public void pause() { }
+    @Override public void resume() { }
+    @Override public void hide() { }
 
     @Override
     public void dispose() {

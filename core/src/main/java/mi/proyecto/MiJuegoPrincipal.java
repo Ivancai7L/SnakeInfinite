@@ -6,7 +6,15 @@ public class MiJuegoPrincipal extends Game {
 
     @Override
     public void create() {
-        // Inicia el juego 
         setScreen(new Menu(this));
     }
+
+    public void mostrarMenu() {
+        setScreen(new Menu(this));
+    }
+
+    public void mostrarJuego() {
+        setScreen(new JuegoScreen(this));
+    }
+
 }

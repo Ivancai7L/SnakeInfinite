@@ -12,16 +12,19 @@ public class Snake {
     private float speed;
     private ShapeRenderer shapeRenderer;
 
-    public Snake() {
-        x = 100;
-        y = 100;
-        size = 20;
-        speed = 100;
+    public Snake(float x, float y, float speed) {
+        this.x = x;
+        this.y = y;
+        this.size = 20;
+        this.speed = speed;
         shapeRenderer = new ShapeRenderer();
     }
 
-    public void update() {
+    public Snake() {
+        this(100, 100, 200); // velocidad por defecto
+    }
 
+    public void update() {
         float delta = Gdx.graphics.getDeltaTime();
 
         if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
@@ -34,20 +37,28 @@ public class Snake {
             x += speed * delta;
         }
 
+        // Limitar al área de la pantalla
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        if (x > Gdx.graphics.getWidth() - size) x = Gdx.graphics.getWidth() - size;
+        if (y > Gdx.graphics.getHeight() - size) y = Gdx.graphics.getHeight() - size;
     }
 
     public void draw(SpriteBatch batch) {
         batch.end();
-
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
         shapeRenderer.setColor(Color.GREEN);
         shapeRenderer.rect(x, y, size, size);
         shapeRenderer.end();
-
         batch.begin();
     }
 
     public void dispose() {
         shapeRenderer.dispose();
     }
+
+    // Getters para colisiones
+    public float getX() { return x; }
+    public float getY() { return y; }
+    public float getSize() { return size; }
 }
