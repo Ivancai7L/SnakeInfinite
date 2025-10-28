@@ -3,35 +3,43 @@ package mi.proyecto;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 
 public class Frutas {
     private Texture textura;
     private float x, y;
-    private float size;
+    private float size = 20f;
 
-    // Constructor con posición y tamaño personalizado
-    public Frutas(float x, float y, float size) {
-        textura = new Texture("Frutaimg.png");
-        this.x = x;
-        this.y = y;
-        this.size = size;
-    }
-
-    // Constructor por defecto: posición aleatoria y tamaño 20
     public Frutas() {
         textura = new Texture("Frutaimg.png");
-        this.size = 30;
-        regenerar();
+        regenerar(null);
     }
 
-    // Mueve la fruta a una nueva posición aleatoria
-    public void regenerar() {
-        x = MathUtils.random(0, com.badlogic.gdx.Gdx.graphics.getWidth() - size);
-        y = MathUtils.random(0, com.badlogic.gdx.Gdx.graphics.getHeight() - size);
+    // Regenera en posición aleatoria (sin tocar serpiente)
+    public void regenerar(Snake snake) {
+        boolean sobreSerpiente;
+        do {
+            sobreSerpiente = false;
+            x = MathUtils.floor(MathUtils.random(0, (float)Math.floor(com.badlogic.gdx.Gdx.graphics.getWidth() / size))) * size;
+            y = MathUtils.floor(MathUtils.random(0, (float)Math.floor(com.badlogic.gdx.Gdx.graphics.getHeight() / size))) * size;
+
+            if (snake != null) {
+                for (int i = 0; i < snake.getSegmentCount(); i++) {
+                    if (snake.getSegmentX(i) == x && snake.getSegmentY(i) == y) {
+                        sobreSerpiente = true;
+                        break;
+                    }
+                }
+            }
+        } while (sobreSerpiente);
     }
 
     public void draw(SpriteBatch batch) {
         batch.draw(textura, x, y, size, size);
+    }
+
+    public Rectangle getRect() {
+        return new Rectangle(x, y, size, size);
     }
 
     public void dispose() {

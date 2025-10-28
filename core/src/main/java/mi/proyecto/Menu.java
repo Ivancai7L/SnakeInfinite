@@ -1,31 +1,36 @@
 package mi.proyecto;
 
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.Input;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.Input;
 
 public class Menu implements Screen {
     private MiJuegoPrincipal game;
-    private SpriteBatch batch;
     private BitmapFont font;
     private Texture fondo;
-    private float tiempo; // 🔹 Variable para controlar el parpadeo
+    private Music musica;
+    private float tiempo;
 
     public Menu(MiJuegoPrincipal game) {
         this.game = game;
-        batch = new SpriteBatch();
         font = new BitmapFont();
-        fondo = new Texture("Fondosnake.jpg");
-        tiempo = 0; // Inicializa el contador de tiempo
-    }
+        font.getData().setScale(2);
+        font.setColor(Color.WHITE);
 
-    @Override
-    public void show() { }
+
+        fondo = new Texture("Fondosnake.jpg");
+        musica = Gdx.audio.newMusic(Gdx.files.internal("Musicasnake.mp3"));
+        musica.setLooping(true);
+        musica.setVolume(0.5f);
+        musica.play();
+
+        tiempo = 0f;
+    }
 
     @Override
     public void render(float delta) {
@@ -34,40 +39,50 @@ public class Menu implements Screen {
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        batch.begin();
-        batch.draw(fondo, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        game.batch.begin();
+        game.batch.draw(fondo, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 
-        font.getData().setScale(2);
+        // 📘 Título
         font.setColor(Color.WHITE);
-        font.draw(batch, "Snake Infinite", Gdx.graphics.getWidth() / 2 - 100, Gdx.graphics.getHeight() / 2 + 40);
+        font.draw(game.batch, "SNAKE INFINITE",
+            Gdx.graphics.getWidth() / 2f - 120,
+            Gdx.graphics.getHeight() / 2f + 80);
 
-        // 🔹 Efecto de parpadeo con opacidad variable (entre 0 y 1)
+        // ✨ Texto parpadeante
         float alpha = (float) ((Math.sin(tiempo * 3) + 1) / 2);
-        font.setColor(1, 1, 1, alpha); // RGB = blanco, alpha = transparencia
-        font.draw(batch, "Presiona ENTER para jugar", Gdx.graphics.getWidth() / 2 - 150, Gdx.graphics.getHeight() / 2);
+        font.setColor(1, 1, 1, alpha);
+        font.draw(game.batch, "Presiona ENTER para jugar",
+            Gdx.graphics.getWidth() / 2f - 160,
+            Gdx.graphics.getHeight() / 2f + 20);
 
-        // 🔹 Vuelve el color a opaco para el texto de salida
+        // 📜 Texto fijo
         font.setColor(Color.WHITE);
-        font.draw(batch, "Presiona ESC para salir", Gdx.graphics.getWidth() / 2 - 150, Gdx.graphics.getHeight() / 2 - 60);
+        font.draw(game.batch, "Presiona ESC para salir",
+            Gdx.graphics.getWidth() / 2f - 140,
+            Gdx.graphics.getHeight() / 2f - 40);
 
-        batch.end();
+        game.batch.end();
 
+        // 🎮 Controles
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-            game.setScreen(new JuegoScreen(game));
+            game.mostrarJuego();
         } else if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            musica.stop();
             Gdx.app.exit();
         }
     }
 
-    @Override public void resize(int width, int height) { }
-    @Override public void pause() { }
-    @Override public void resume() { }
-    @Override public void hide() { }
+    @Override public void show() {}
+    @Override public void resize(int width, int height) {}
+    @Override public void pause() {}
+    @Override public void resume() {}
+    @Override public void hide() {}
 
     @Override
     public void dispose() {
-        batch.dispose();
         font.dispose();
         fondo.dispose();
+        musica.dispose();
+        // ❌ No se debe cerrar game.batch aquí
     }
 }
