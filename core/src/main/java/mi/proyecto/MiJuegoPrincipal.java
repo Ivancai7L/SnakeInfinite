@@ -26,4 +26,3 @@ public class MiJuegoPrincipal extends Game {
         super.dispose();
     }
 }
-

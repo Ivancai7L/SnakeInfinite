@@ -2,107 +2,80 @@ package mi.proyecto;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.math.Rectangle;
+import com.badlogic.gdx.math.Vector2;
 
 import java.util.ArrayList;
 
 public class Snake {
-    private final float size = 20f;              // Tamaño de cada bloque
-    private final float moveDelay = 0.08f;       // Velocidad (tiempo entre pasos)
-    private final ShapeRenderer shapeRenderer;
-    private final ArrayList<float[]> cuerpo;     // Cada segmento es [x, y]
-    private int dirX = 1, dirY = 0;              // Dirección inicial (derecha)
-    private float timer = 0f;
-    private int growCount = 0;                   // Segs por crecer
+    private Texture textura;
+    private ArrayList<Vector2> cuerpo;
+    private float velocidad;
+    private float tamaño;
+    private float rotacion;
+    private int crecimiento;
 
     public Snake() {
-        shapeRenderer = new ShapeRenderer();
+        textura = new Texture("Snakeimg.png");
+        tamaño = 20f;
+        velocidad = 160f;
+        rotacion = 0f;
+        crecimiento = 0;
         cuerpo = new ArrayList<>();
-        cuerpo.add(new float[]{100f, 100f});     // Posición inicial
+        cuerpo.add(new Vector2(100, 100));
     }
 
-    // Actualiza movimiento
-    public void update() {
-        handleInput();
-        timer += Gdx.graphics.getDeltaTime();
-        if (timer >= moveDelay) {
-            timer = 0f;
-            step();
+    public void update(float delta) {
+        // Rotación con flechas izquierda/derecha
+        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) rotacion += 180 * delta;
+        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) rotacion -= 180 * delta;
+
+        // Mover cabeza hacia adelante constantemente
+        Vector2 cabeza = cuerpo.get(0);
+        Vector2 nuevaPos = new Vector2(
+            cabeza.x + (float) Math.cos(Math.toRadians(rotacion)) * velocidad * delta,
+            cabeza.y + (float) Math.sin(Math.toRadians(rotacion)) * velocidad * delta
+        );
+
+        // Agregar nueva cabeza al principio
+        cuerpo.add(0, nuevaPos);
+
+        // Limitar longitud del cuerpo (elimina último segmento)
+        while (cuerpo.size() > getLongitudDeseada()) {
+            cuerpo.remove(cuerpo.size() - 1);
         }
+
+        // Teletransporte en bordes del mapa
+        if (nuevaPos.x < 0) nuevaPos.x = Gdx.graphics.getWidth();
+        if (nuevaPos.x > Gdx.graphics.getWidth()) nuevaPos.x = 0;
+        if (nuevaPos.y < 0) nuevaPos.y = Gdx.graphics.getHeight();
+        if (nuevaPos.y > Gdx.graphics.getHeight()) nuevaPos.y = 0;
     }
 
-    private void handleInput() {
-        if (Gdx.input.isKeyPressed(Input.Keys.UP) && dirY == 0) {
-            dirX = 0; dirY = 1;
-        } else if (Gdx.input.isKeyPressed(Input.Keys.DOWN) && dirY == 0) {
-            dirX = 0; dirY = -1;
-        } else if (Gdx.input.isKeyPressed(Input.Keys.LEFT) && dirX == 0) {
-            dirX = -1; dirY = 0;
-        } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) && dirX == 0) {
-            dirX = 1; dirY = 0;
-        }
+    private int getLongitudDeseada() {
+        return 20 + crecimiento * 15;
     }
 
-    private void step() {
-        float[] head = cuerpo.get(0);
-        float newX = head[0] + dirX * size;
-        float newY = head[1] + dirY * size;
-
-        // Movimiento infinito (pasa bordes)
-        if (newX < 0) newX = Gdx.graphics.getWidth() - size;
-        if (newX >= Gdx.graphics.getWidth()) newX = 0;
-        if (newY < 0) newY = Gdx.graphics.getHeight() - size;
-        if (newY >= Gdx.graphics.getHeight()) newY = 0;
-
-        // Nueva cabeza al frente
-        cuerpo.add(0, new float[]{newX, newY});
-
-        // Si no hay crecimiento, eliminar cola
-        if (growCount > 0) growCount--;
-        else cuerpo.remove(cuerpo.size() - 1);
+    public void crecer() {
+        crecimiento++;
     }
 
-    // Crece 1 bloque
-    public void crecer() { growCount++; }
-
-    // Dibujo
     public void draw(SpriteBatch batch) {
-        batch.end();
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(Color.GREEN);
-        for (float[] seg : cuerpo) {
-            shapeRenderer.rect(seg[0], seg[1], size, size);
+        for (Vector2 seg : cuerpo) {
+            batch.draw(textura, seg.x, seg.y, tamaño, tamaño);
         }
-        shapeRenderer.end();
-        batch.begin();
     }
 
-    // Colisión real
-    public boolean colisionaConCuerpo() {
-        float[] cabeza = cuerpo.get(0);
-        for (int i = 1; i < cuerpo.size(); i++) {
-            float[] seg = cuerpo.get(i);
-            if (cabeza[0] == seg[0] && cabeza[1] == seg[1]) return true;
-        }
-        return false;
+    public Vector2 getCabeza() {
+        return cuerpo.get(0);
     }
 
-    // Rect de colisión
-    public Rectangle getRect() {
-        float[] head = cuerpo.get(0);
-        return new Rectangle(head[0], head[1], size, size);
+    public ArrayList<Vector2> getCuerpo() {
+        return cuerpo;
     }
 
-    // Datos útiles
-    public float getX() { return cuerpo.get(0)[0]; }
-    public float getY() { return cuerpo.get(0)[1]; }
-    public float getSize() { return size; }
-    public int getSegmentCount() { return cuerpo.size(); }
-    public float getSegmentX(int i) { return cuerpo.get(i)[0]; }
-    public float getSegmentY(int i) { return cuerpo.get(i)[1]; }
-
-    public void dispose() { shapeRenderer.dispose(); }
+    public void dispose() {
+        textura.dispose();
+    }
 }
