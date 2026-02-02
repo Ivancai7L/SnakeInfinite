@@ -1,81 +1,114 @@
 package mi.proyecto;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector2;
-
-import java.util.ArrayList;
+import java.util.LinkedList;
 
 public class Snake {
-    private Texture textura;
-    private ArrayList<Vector2> cuerpo;
+
+    private LinkedList<Vector2> cuerpo;
+    private Direccion direccion;
     private float velocidad;
-    private float tamaño;
-    private float rotacion;
-    private int crecimiento;
+    private float tamano;
+    private Texture textura;
 
-    public Snake() {
-        textura = new Texture("Snakeimg.png");
-        tamaño = 20f;
-        velocidad = 160f;
-        rotacion = 0f;
-        crecimiento = 0;
-        cuerpo = new ArrayList<>();
-        cuerpo.add(new Vector2(100, 100));
-    }
+    public Snake(float velocidad, float tamano) {
+        this.velocidad = velocidad;
+        this.tamano = tamano;
 
-    public void update(float delta) {
-        // Rotación con flechas izquierda/derecha
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) rotacion += 180 * delta;
-        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) rotacion -= 180 * delta;
-
-        // Mover cabeza hacia adelante constantemente
-        Vector2 cabeza = cuerpo.get(0);
-        Vector2 nuevaPos = new Vector2(
-            cabeza.x + (float) Math.cos(Math.toRadians(rotacion)) * velocidad * delta,
-            cabeza.y + (float) Math.sin(Math.toRadians(rotacion)) * velocidad * delta
-        );
-
-        // Agregar nueva cabeza al principio
-        cuerpo.add(0, nuevaPos);
-
-        // Limitar longitud del cuerpo (elimina último segmento)
-        while (cuerpo.size() > getLongitudDeseada()) {
-            cuerpo.remove(cuerpo.size() - 1);
+        // Intentar cargar textura, si falla crear una verde
+        try {
+            if (Gdx.files.internal("Snakeimg.png").exists()) {
+                this.textura = new Texture("Snakeimg.png");
+                System.out.println("Textura Snakeimg.png cargada");
+            } else {
+                // Crear textura verde usando Pixmap
+                this.textura = crearTexturaColor(0, 255, 0); // Verde
+                System.out.println("Textura Snakeimg.png no encontrada, usando textura verde generada");
+            }
+        } catch (Exception e) {
+            System.out.println("Error al cargar Snakeimg.png: " + e.getMessage());
+            this.textura = crearTexturaColor(0, 255, 0); // Verde
         }
 
-        // Teletransporte en bordes del mapa
-        if (nuevaPos.x < 0) nuevaPos.x = Gdx.graphics.getWidth();
-        if (nuevaPos.x > Gdx.graphics.getWidth()) nuevaPos.x = 0;
-        if (nuevaPos.y < 0) nuevaPos.y = Gdx.graphics.getHeight();
-        if (nuevaPos.y > Gdx.graphics.getHeight()) nuevaPos.y = 0;
+        cuerpo = new LinkedList<>();
+        // Posición inicial centrada en la pantalla
+        float centroX = Gdx.graphics.getWidth() / 2f;
+        float centroY = Gdx.graphics.getHeight() / 2f;
+        cuerpo.add(new Vector2(centroX, centroY));
+        direccion = Direccion.DERECHA;
     }
 
-    private int getLongitudDeseada() {
-        return 20 + crecimiento * 15;
+    /**
+     * Crea una textura de un solo color usando Pixmap
+     */
+    private Texture crearTexturaColor(int r, int g, int b) {
+        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGB888);
+        pixmap.setColor(r / 255f, g / 255f, b / 255f, 1f);
+        pixmap.fill();
+        Texture tex = new Texture(pixmap);
+        pixmap.dispose();
+        return tex;
     }
 
-    public void crecer() {
-        crecimiento++;
+    public void cambiarDireccion(Direccion nueva) {
+        if (nueva == Direccion.ARRIBA && direccion == Direccion.ABAJO) return;
+        if (nueva == Direccion.ABAJO && direccion == Direccion.ARRIBA) return;
+        if (nueva == Direccion.IZQUIERDA && direccion == Direccion.DERECHA) return;
+        if (nueva == Direccion.DERECHA && direccion == Direccion.IZQUIERDA) return;
+        direccion = nueva;
     }
 
-    public void draw(SpriteBatch batch) {
-        for (Vector2 seg : cuerpo) {
-            batch.draw(textura, seg.x, seg.y, tamaño, tamaño);
+    public void actualizar(float delta) {
+        mover(delta);
+    }
+
+    private void mover(float delta) {
+        Vector2 cabeza = cuerpo.getFirst();
+        Vector2 nueva = new Vector2(cabeza);
+
+        switch (direccion) {
+            case ARRIBA:    nueva.y += velocidad * delta; break;
+            case ABAJO:     nueva.y -= velocidad * delta; break;
+            case IZQUIERDA: nueva.x -= velocidad * delta; break;
+            case DERECHA:   nueva.x += velocidad * delta; break;
+        }
+
+        cuerpo.addFirst(nueva);
+        cuerpo.removeLast();
+    }
+
+    public void comer() {
+        Vector2 ultima = cuerpo.getLast();
+        cuerpo.add(new Vector2(ultima));
+    }
+
+    public void dibujar(SpriteBatch batch) {
+        for (Vector2 p : cuerpo) {
+            batch.draw(textura, p.x, p.y, tamano, tamano);
         }
     }
 
+    /**
+     * Obtiene la posición de la cabeza de la serpiente
+     * @return Vector2 con la posición de la cabeza
+     */
     public Vector2 getCabeza() {
-        return cuerpo.get(0);
+        return cuerpo.getFirst();
     }
 
-    public ArrayList<Vector2> getCuerpo() {
+    /**
+     * Obtiene el cuerpo completo de la serpiente
+     * @return LinkedList con todas las posiciones del cuerpo
+     */
+    public LinkedList<Vector2> getCuerpo() {
         return cuerpo;
     }
 
     public void dispose() {
-        textura.dispose();
+        if (textura != null) textura.dispose();
     }
 }

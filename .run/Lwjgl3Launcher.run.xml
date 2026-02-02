@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Lwjgl3Launcher" type="Application" factoryName="Application" nameIsGenerated="true">
+  <configuration default="false" name="Lwjgl3Launcher" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="mi.proyecto.lwjgl3.Lwjgl3Launcher" />
     <extension name="coverage">
       <pattern>

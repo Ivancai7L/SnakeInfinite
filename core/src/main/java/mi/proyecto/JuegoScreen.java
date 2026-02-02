@@ -3,136 +3,223 @@ package mi.proyecto;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.math.Vector2;
 
-import java.util.ArrayList;
-import java.util.Random;
-
 public class JuegoScreen implements Screen {
-    private final MiJuegoPrincipal game;
-    private OrthographicCamera camara;
+
+    private final MiJuegoPrincipal juego;
     private Snake snake;
-    private ArrayList<Frutas> frutas;
+    private Frutas fruta;
     private BitmapFont font;
-    private int puntaje;
-    private boolean gameOver;
-    private Music musica;
-    private Random random;
 
-    private static final int CANTIDAD_FRUTAS = 25;
+    private int puntuacion;
+    private boolean juegoTerminado;
 
-    public JuegoScreen(MiJuegoPrincipal game) {
-        this.game = game;
-        camara = new OrthographicCamera(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camara.setToOrtho(false);
+    public JuegoScreen(MiJuegoPrincipal juego) {
+        System.out.println("JuegoScreen: Constructor llamado");
+        this.juego = juego;
+        System.out.println("JuegoScreen: Constructor completado");
+    }
 
-        snake = new Snake();
-        frutas = new ArrayList<>();
-        random = new Random();
+    @Override
+    public void show() {
+        try {
+            // Obtener velocidad según dificultad seleccionada
+            float velocidad = 100f; // velocidad por defecto
 
-        for (int i = 0; i < CANTIDAD_FRUTAS; i++) {
-            Frutas f = new Frutas();
-            f.regenerar();
-            frutas.add(f);
+            // Verificar si hay dificultad seleccionada
+            if (juego.dificultadSeleccionada != null) {
+                velocidad = juego.dificultadSeleccionada.getVelocidad() * 50;
+            } else {
+                // Si no hay dificultad, usar NORMAL por defecto
+                juego.dificultadSeleccionada = Dificultad.NORMAL;
+                velocidad = Dificultad.NORMAL.getVelocidad() * 50;
+                System.out.println("Advertencia: No se seleccionó dificultad. Usando NORMAL por defecto.");
+            }
+
+            // Crear la serpiente
+            snake = new Snake(velocidad, 20f);
+            System.out.println("Snake creada con velocidad: " + velocidad);
+
+            // Crear la fruta
+            fruta = new Frutas();
+            System.out.println("Frutas creadas");
+
+            // Inicializar fuente para mostrar puntuación
+            font = new BitmapFont();
+            font.setColor(Color.WHITE);
+            font.getData().setScale(2);
+
+            puntuacion = 0;
+            juegoTerminado = false;
+
+            System.out.println("JuegoScreen inicializado correctamente");
+
+        } catch (Exception e) {
+            System.err.println("ERROR al inicializar JuegoScreen:");
+            e.printStackTrace();
+            // Si hay error, volver al menú
+            Gdx.app.postRunnable(new Runnable() {
+                @Override
+                public void run() {
+                    juego.mostrarMenu();
+                }
+            });
         }
-
-        font = new BitmapFont();
-        font.setColor(Color.WHITE);
-        puntaje = 0;
-        gameOver = false;
-
-        musica = Gdx.audio.newMusic(Gdx.files.internal("Musicasnake.mp3"));
-        musica.setLooping(true);
-        musica.setVolume(0.4f);
-        musica.play();
     }
 
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(0f, 0.25f, 0f, 1f);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        try {
+            // Limpiar pantalla
+            Gdx.gl.glClearColor(0.1f, 0.1f, 0.15f, 1);
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        if (!gameOver) {
-            snake.update(delta);
+            if (!juegoTerminado && snake != null) {
+                // Manejar input del teclado
+                manejarInput();
 
-            Vector2 cabeza = snake.getCabeza();
-            for (Frutas f : frutas) {
-                if (f.getRect().contains(cabeza.x, cabeza.y)) {
-                    snake.crecer();
-                    puntaje++;
-                    f.regenerar();
-                }
+                // Actualizar serpiente
+                snake.actualizar(delta);
+
+                // Verificar colisión con fruta
+                verificarColisionConFruta();
+
+                // Verificar colisiones con bordes
+                verificarColisionConBordes();
             }
 
-            if (colisionaConCuerpo()) {
-                gameOver = true;
-                musica.stop();
+            // Dibujar todo
+            juego.batch.begin();
+
+            // Dibujar fruta
+            if (fruta != null) {
+                fruta.dibujar(juego.batch);
             }
-        }
 
-        camara.position.set(snake.getCabeza().x, snake.getCabeza().y, 0);
-        camara.update();
-        game.batch.setProjectionMatrix(camara.combined);
+            // Dibujar serpiente
+            if (snake != null) {
+                snake.dibujar(juego.batch);
+            }
 
-        game.batch.begin();
-        for (Frutas f : frutas) f.draw(game.batch);
-        snake.draw(game.batch);
+            // Dibujar puntuación
+            if (font != null) {
+                font.draw(juego.batch, "Puntuacion: " + puntuacion, 20, Gdx.graphics.getHeight() - 20);
+                font.draw(juego.batch, "ESC para volver al menu", 20, Gdx.graphics.getHeight() - 50);
+            }
 
-        font.draw(game.batch, "Puntaje: " + puntaje,
-            camara.position.x - Gdx.graphics.getWidth() / 2f + 20,
-            camara.position.y + Gdx.graphics.getHeight() / 2f - 20);
+            // Si el juego terminó, mostrar mensaje
+            if (juegoTerminado && font != null) {
+                font.draw(juego.batch, "GAME OVER! Presiona ESPACIO para reiniciar",
+                    Gdx.graphics.getWidth() / 2f - 400,
+                    Gdx.graphics.getHeight() / 2f);
+            }
 
-        if (gameOver) {
-            font.draw(game.batch, "GAME OVER - ENTER para reiniciar",
-                camara.position.x - 180, camara.position.y);
-        }
+            juego.batch.end();
 
-        game.batch.end();
+            // Volver al menú si se presiona ESC
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+                juego.mostrarMenu();
+            }
 
-        if (gameOver && Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) reiniciar();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            musica.stop();
-            game.mostrarMenu();
+            // Reiniciar si se presiona ESPACIO y el juego terminó
+            if (juegoTerminado && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+                show(); // Reiniciar el juego
+            }
+
+        } catch (Exception e) {
+            System.err.println("ERROR en render de JuegoScreen:");
+            e.printStackTrace();
         }
     }
 
-    private boolean colisionaConCuerpo() {
+    private void manejarInput() {
+        // Controles con flechas
+        if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
+            snake.cambiarDireccion(Direccion.ARRIBA);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)) {
+            snake.cambiarDireccion(Direccion.ABAJO);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)) {
+            snake.cambiarDireccion(Direccion.IZQUIERDA);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)) {
+            snake.cambiarDireccion(Direccion.DERECHA);
+        }
+
+        // Controles alternativos con WASD
+        if (Gdx.input.isKeyJustPressed(Input.Keys.W)) {
+            snake.cambiarDireccion(Direccion.ARRIBA);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.S)) {
+            snake.cambiarDireccion(Direccion.ABAJO);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.A)) {
+            snake.cambiarDireccion(Direccion.IZQUIERDA);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.D)) {
+            snake.cambiarDireccion(Direccion.DERECHA);
+        }
+    }
+
+    private void verificarColisionConFruta() {
+        if (snake == null || fruta == null) return;
+
+        // Obtener la cabeza de la serpiente
         Vector2 cabeza = snake.getCabeza();
-        ArrayList<Vector2> cuerpo = snake.getCuerpo();
-        for (int i = 5; i < cuerpo.size(); i++) {
-            if (cabeza.dst(cuerpo.get(i)) < 10f) return true;
+        Vector2 posFruta = fruta.getPosicion();
+
+        // Verificar si la cabeza está cerca de la fruta (colisión simple)
+        float distancia = cabeza.dst(posFruta);
+
+        if (distancia < 25f) { // 25 es aproximadamente el tamaño de la fruta
+            // La serpiente comió la fruta
+            snake.comer();
+            fruta.regenerar();
+            puntuacion += 10;
+            System.out.println("Fruta comida! Puntuación: " + puntuacion);
         }
-        return false;
     }
 
-    private void reiniciar() {
-        snake.dispose();
-        snake = new Snake();
-        frutas.clear();
-        for (int i = 0; i < CANTIDAD_FRUTAS; i++) {
-            Frutas f = new Frutas();
-            f.regenerar();
-            frutas.add(f);
+    private void verificarColisionConBordes() {
+        if (snake == null) return;
+
+        Vector2 cabeza = snake.getCabeza();
+
+        // Verificar si la serpiente salió de los límites
+        if (cabeza.x < 0 || cabeza.x > Gdx.graphics.getWidth() ||
+            cabeza.y < 0 || cabeza.y > Gdx.graphics.getHeight()) {
+            juegoTerminado = true;
+            System.out.println("Game Over! Puntuación final: " + puntuacion);
         }
-        puntaje = 0;
-        gameOver = false;
-        musica.play();
     }
 
-    @Override public void resize(int width, int height) { camara.setToOrtho(false, width, height); }
-    @Override public void pause() {}
-    @Override public void resume() {}
-    @Override public void show() {}
-    @Override public void hide() {}
-    @Override public void dispose() {
-        snake.dispose();
-        for (Frutas f : frutas) f.dispose();
-        font.dispose();
-        musica.dispose();
+    @Override
+    public void resize(int width, int height) {}
+
+    @Override
+    public void pause() {}
+
+    @Override
+    public void resume() {}
+
+    @Override
+    public void hide() {
+        dispose();
+    }
+
+    @Override
+    public void dispose() {
+        try {
+            if (snake != null) snake.dispose();
+            if (fruta != null) fruta.dispose();
+            if (font != null) font.dispose();
+        } catch (Exception e) {
+            System.err.println("Error al hacer dispose: " + e.getMessage());
+        }
     }
 }
