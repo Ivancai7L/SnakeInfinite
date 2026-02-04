@@ -6,9 +6,14 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 
 public class JuegoScreen implements Screen {
+
+    private static final float VELOCIDAD_BASE = 50f;
+    private static final float TAMANIO_SERPIENTE = 20f;
+    private static final float ESCALA_FONT = 2f;
 
     private final MiJuegoPrincipal juego;
     private Snake snake;
@@ -27,31 +32,22 @@ public class JuegoScreen implements Screen {
     @Override
     public void show() {
         try {
-            // Obtener velocidad según dificultad seleccionada
-            float velocidad = 100f; // velocidad por defecto
-
-            // Verificar si hay dificultad seleccionada
-            if (juego.dificultadSeleccionada != null) {
-                velocidad = juego.dificultadSeleccionada.getVelocidad() * 50;
-            } else {
-                // Si no hay dificultad, usar NORMAL por defecto
+            if (juego.dificultadSeleccionada == null) {
                 juego.dificultadSeleccionada = Dificultad.NORMAL;
-                velocidad = Dificultad.NORMAL.getVelocidad() * 50;
                 System.out.println("Advertencia: No se seleccionó dificultad. Usando NORMAL por defecto.");
             }
 
-            // Crear la serpiente
-            snake = new Snake(velocidad, 20f);
+            float velocidad = obtenerVelocidadPorDificultad(juego.dificultadSeleccionada);
+
+            snake = new Snake(velocidad, TAMANIO_SERPIENTE);
             System.out.println("Snake creada con velocidad: " + velocidad);
 
-            // Crear la fruta
             fruta = new Frutas();
             System.out.println("Frutas creadas");
 
-            // Inicializar fuente para mostrar puntuación
             font = new BitmapFont();
             font.setColor(Color.WHITE);
-            font.getData().setScale(2);
+            font.getData().setScale(ESCALA_FONT);
 
             puntuacion = 0;
             juegoTerminado = false;
@@ -61,7 +57,6 @@ public class JuegoScreen implements Screen {
         } catch (Exception e) {
             System.err.println("ERROR al inicializar JuegoScreen:");
             e.printStackTrace();
-            // Si hay error, volver al menú
             Gdx.app.postRunnable(new Runnable() {
                 @Override
                 public void run() {
@@ -71,47 +66,49 @@ public class JuegoScreen implements Screen {
         }
     }
 
+    private float obtenerVelocidadPorDificultad(Dificultad dificultad) {
+        switch (dificultad) {
+            case FACIL:
+                return VELOCIDAD_BASE * 2f;
+            case DIFICIL:
+                return VELOCIDAD_BASE * 6f;
+            case IMPOSIBLE:
+                return VELOCIDAD_BASE * 8f;
+            case NORMAL:
+            default:
+                return VELOCIDAD_BASE * 4f;
+        }
+    }
+
     @Override
     public void render(float delta) {
         try {
-            // Limpiar pantalla
             Gdx.gl.glClearColor(0.1f, 0.1f, 0.15f, 1);
             Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
             if (!juegoTerminado && snake != null) {
-                // Manejar input del teclado
                 manejarInput();
-
-                // Actualizar serpiente
                 snake.actualizar(delta);
-
-                // Verificar colisión con fruta
                 verificarColisionConFruta();
-
-                // Verificar colisiones con bordes
                 verificarColisionConBordes();
+                verificarColisionConCuerpo();
             }
 
-            // Dibujar todo
             juego.batch.begin();
 
-            // Dibujar fruta
             if (fruta != null) {
                 fruta.dibujar(juego.batch);
             }
 
-            // Dibujar serpiente
             if (snake != null) {
                 snake.dibujar(juego.batch);
             }
 
-            // Dibujar puntuación
             if (font != null) {
-                font.draw(juego.batch, "Puntuacion: " + puntuacion, 20, Gdx.graphics.getHeight() - 20);
-                font.draw(juego.batch, "ESC para volver al menu", 20, Gdx.graphics.getHeight() - 50);
+                font.draw(juego.batch, "Puntuación: " + puntuacion, 20, Gdx.graphics.getHeight() - 20);
+                font.draw(juego.batch, "ESC para volver al menú", 20, Gdx.graphics.getHeight() - 50);
             }
 
-            // Si el juego terminó, mostrar mensaje
             if (juegoTerminado && font != null) {
                 font.draw(juego.batch, "GAME OVER! Presiona ESPACIO para reiniciar",
                     Gdx.graphics.getWidth() / 2f - 400,
@@ -120,14 +117,12 @@ public class JuegoScreen implements Screen {
 
             juego.batch.end();
 
-            // Volver al menú si se presiona ESC
             if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
                 juego.mostrarMenu();
             }
 
-            // Reiniciar si se presiona ESPACIO y el juego terminó
             if (juegoTerminado && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                show(); // Reiniciar el juego
+                show();
             }
 
         } catch (Exception e) {
@@ -137,7 +132,6 @@ public class JuegoScreen implements Screen {
     }
 
     private void manejarInput() {
-        // Controles con flechas
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP)) {
             snake.cambiarDireccion(Direccion.ARRIBA);
         }
@@ -151,7 +145,6 @@ public class JuegoScreen implements Screen {
             snake.cambiarDireccion(Direccion.DERECHA);
         }
 
-        // Controles alternativos con WASD
         if (Gdx.input.isKeyJustPressed(Input.Keys.W)) {
             snake.cambiarDireccion(Direccion.ARRIBA);
         }
@@ -169,15 +162,10 @@ public class JuegoScreen implements Screen {
     private void verificarColisionConFruta() {
         if (snake == null || fruta == null) return;
 
-        // Obtener la cabeza de la serpiente
         Vector2 cabeza = snake.getCabeza();
-        Vector2 posFruta = fruta.getPosicion();
+        Rectangle areaCabeza = new Rectangle(cabeza.x, cabeza.y, snake.getTamano(), snake.getTamano());
 
-        // Verificar si la cabeza está cerca de la fruta (colisión simple)
-        float distancia = cabeza.dst(posFruta);
-
-        if (distancia < 25f) { // 25 es aproximadamente el tamaño de la fruta
-            // La serpiente comió la fruta
+        if (areaCabeza.overlaps(fruta.getRect())) {
             snake.comer();
             fruta.regenerar();
             puntuacion += 10;
@@ -190,11 +178,37 @@ public class JuegoScreen implements Screen {
 
         Vector2 cabeza = snake.getCabeza();
 
-        // Verificar si la serpiente salió de los límites
-        if (cabeza.x < 0 || cabeza.x > Gdx.graphics.getWidth() ||
-            cabeza.y < 0 || cabeza.y > Gdx.graphics.getHeight()) {
+        if (cabeza.x < 0 || cabeza.x > Gdx.graphics.getWidth() - snake.getTamano() ||
+            cabeza.y < 0 || cabeza.y > Gdx.graphics.getHeight() - snake.getTamano()) {
             juegoTerminado = true;
             System.out.println("Game Over! Puntuación final: " + puntuacion);
+        }
+    }
+
+    private void verificarColisionConCuerpo() {
+        if (snake == null) return;
+
+        if (snake.getCuerpo().size() < 8) {
+            return;
+        }
+
+        Vector2 cabeza = snake.getCabeza();
+        boolean esCabeza = true;
+        int segmentosIgnorados = 0;
+        for (Vector2 segmento : snake.getCuerpo()) {
+            if (esCabeza) {
+                esCabeza = false;
+                continue;
+            }
+            if (segmentosIgnorados < 3) {
+                segmentosIgnorados++;
+                continue;
+            }
+            if (cabeza.dst(segmento) < snake.getTamano() * 0.35f) {
+                juegoTerminado = true;
+                System.out.println("Game Over! Puntuación final: " + puntuacion);
+                return;
+            }
         }
     }
 
