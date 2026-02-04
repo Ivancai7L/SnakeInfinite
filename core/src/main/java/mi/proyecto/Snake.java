@@ -9,42 +9,38 @@ import java.util.LinkedList;
 
 public class Snake {
 
-    private LinkedList<Vector2> cuerpo;
+    private final LinkedList<Vector2> cuerpo;
     private Direccion direccion;
-    private float velocidad;
-    private float tamano;
+    private final float velocidad;
+    private final float tamano;
     private Texture textura;
+    private int crecimientoPendiente;
 
     public Snake(float velocidad, float tamano) {
         this.velocidad = velocidad;
         this.tamano = tamano;
 
-        // Intentar cargar textura, si falla crear una verde
         try {
             if (Gdx.files.internal("Snakeimg.png").exists()) {
                 this.textura = new Texture("Snakeimg.png");
                 System.out.println("Textura Snakeimg.png cargada");
             } else {
-                // Crear textura verde usando Pixmap
-                this.textura = crearTexturaColor(0, 255, 0); // Verde
+                this.textura = crearTexturaColor(0, 255, 0);
                 System.out.println("Textura Snakeimg.png no encontrada, usando textura verde generada");
             }
         } catch (Exception e) {
             System.out.println("Error al cargar Snakeimg.png: " + e.getMessage());
-            this.textura = crearTexturaColor(0, 255, 0); // Verde
+            this.textura = crearTexturaColor(0, 255, 0);
         }
 
         cuerpo = new LinkedList<>();
-        // Posición inicial centrada en la pantalla
         float centroX = Gdx.graphics.getWidth() / 2f;
         float centroY = Gdx.graphics.getHeight() / 2f;
         cuerpo.add(new Vector2(centroX, centroY));
         direccion = Direccion.DERECHA;
+        crecimientoPendiente = 0;
     }
 
-    /**
-     * Crea una textura de un solo color usando Pixmap
-     */
     private Texture crearTexturaColor(int r, int g, int b) {
         Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGB888);
         pixmap.setColor(r / 255f, g / 255f, b / 255f, 1f);
@@ -78,12 +74,15 @@ public class Snake {
         }
 
         cuerpo.addFirst(nueva);
-        cuerpo.removeLast();
+        if (crecimientoPendiente > 0) {
+            crecimientoPendiente--;
+        } else {
+            cuerpo.removeLast();
+        }
     }
 
     public void comer() {
-        Vector2 ultima = cuerpo.getLast();
-        cuerpo.add(new Vector2(ultima));
+        crecimientoPendiente++;
     }
 
     public void dibujar(SpriteBatch batch) {
@@ -92,20 +91,16 @@ public class Snake {
         }
     }
 
-    /**
-     * Obtiene la posición de la cabeza de la serpiente
-     * @return Vector2 con la posición de la cabeza
-     */
     public Vector2 getCabeza() {
         return cuerpo.getFirst();
     }
 
-    /**
-     * Obtiene el cuerpo completo de la serpiente
-     * @return LinkedList con todas las posiciones del cuerpo
-     */
     public LinkedList<Vector2> getCuerpo() {
         return cuerpo;
+    }
+
+    public float getTamano() {
+        return tamano;
     }
 
     public void dispose() {
