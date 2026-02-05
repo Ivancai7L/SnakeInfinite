@@ -32,15 +32,12 @@ public class JuegoScreen implements Screen {
     @Override
     public void show() {
         try {
-            float velocidad = VELOCIDAD_BASE * 2f;
-
-            if (juego.dificultadSeleccionada != null) {
-                velocidad = juego.dificultadSeleccionada.getVelocidad() * VELOCIDAD_BASE;
-            } else {
+            if (juego.dificultadSeleccionada == null) {
                 juego.dificultadSeleccionada = Dificultad.NORMAL;
-                velocidad = Dificultad.NORMAL.getVelocidad() * VELOCIDAD_BASE;
                 System.out.println("Advertencia: No se seleccionó dificultad. Usando NORMAL por defecto.");
             }
+
+            float velocidad = juego.dificultadSeleccionada.getVelocidad() * VELOCIDAD_BASE;
 
             snake = new Snake(velocidad, TAMANIO_SERPIENTE);
             System.out.println("Snake creada con velocidad: " + velocidad);
@@ -189,7 +186,7 @@ public class JuegoScreen implements Screen {
                 esCabeza = false;
                 continue;
             }
-            if (segmentosIgnorados < 2) {
+            if (segmentosIgnorados < 3) {
                 segmentosIgnorados++;
                 continue;
             }
@@ -202,16 +199,13 @@ public class JuegoScreen implements Screen {
     }
 
     @Override
-    public void resize(int width, int height) {
-    }
+    public void resize(int width, int height) {}
 
     @Override
-    public void pause() {
-    }
+    public void pause() {}
 
     @Override
-    public void resume() {
-    }
+    public void resume() {}
 
     @Override
     public void hide() {

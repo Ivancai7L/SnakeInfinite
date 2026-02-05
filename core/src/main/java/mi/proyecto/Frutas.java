@@ -11,7 +11,7 @@ import java.util.Random;
 public class Frutas {
 
     private static final float TAMANIO = 20f;
-    private static final float MARGEN = 50f; // Margen desde los bordes
+    private static final float MARGEN = 50f;
 
     private final Random random;
 
@@ -72,5 +72,4 @@ public class Frutas {
     public void dispose() {
         if (textura != null) textura.dispose();
     }
-
 }

@@ -70,9 +70,10 @@ public class Menu implements Screen {
             @Override public void clicked(InputEvent event, float x, float y) {
                 clickSound.play(0.8f);
                 musica.stop();
-                game.mostrarJuego();
+                game.mostrarSeleccionDificultad();
             }
         });
+
 
         btnOpciones.addListener(new ClickListener() {
             @Override public void clicked(InputEvent event, float x, float y) {
@@ -112,21 +113,24 @@ public class Menu implements Screen {
         tablaOpciones.setFillParent(true);
         tablaOpciones.align(Align.center);
 
-        Label.LabelStyle estiloTexto = new Label.LabelStyle(new BitmapFont(), Color.WHITE);
+        BitmapFont fontVolumen = new BitmapFont();
+        fontVolumen.getData().setScale(3f); // ajusta el tamaño aquí
+
+        Label.LabelStyle estiloTexto = new Label.LabelStyle(fontVolumen, Color.ORANGE);
         Label lblVolumen = new Label("Volumen", estiloTexto);
 
         // 🎚️ Slider de volumen
         Slider.SliderStyle sliderStyle = new Slider.SliderStyle();
         Texture barraTex = new Texture(Gdx.files.internal("barra.png"));
         TextureRegionDrawable barraDrawable = new TextureRegionDrawable(barraTex);
-        barraDrawable.setMinWidth(300);
-        barraDrawable.setMinHeight(20);
+        barraDrawable.setMinWidth(1500);
+        barraDrawable.setMinHeight(150);
         sliderStyle.background = barraDrawable;
 
         Texture perillaTex = new Texture(Gdx.files.internal("perilla.png"));
         TextureRegionDrawable perillaDrawable = new TextureRegionDrawable(perillaTex);
-        perillaDrawable.setMinWidth(25);
-        perillaDrawable.setMinHeight(25);
+        perillaDrawable.setMinWidth(50);
+        perillaDrawable.setMinHeight(50);
         sliderStyle.knob = perillaDrawable;
 
         sliderVolumen = new Slider(0f, 1f, 0.01f, false, sliderStyle);
@@ -183,7 +187,12 @@ public class Menu implements Screen {
         stage.draw();
     }
 
-    @Override public void resize(int width, int height) {}
+    @Override
+    public void resize(int width, int height) {
+        if (stage != null) {
+            stage.getViewport().update(width, height, true);
+        }
+    }
     @Override public void pause() {}
     @Override public void resume() {}
     @Override public void hide() {}
