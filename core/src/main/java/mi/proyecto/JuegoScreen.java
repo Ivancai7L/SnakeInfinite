@@ -12,7 +12,7 @@ import com.badlogic.gdx.math.Vector2;
 public class JuegoScreen implements Screen {
 
     private static final float VELOCIDAD_BASE = 50f;
-    private static final float TAMANIO_SERPIENTE = 20f;
+    private static final float TAMANIO_SERPIENTE = 25f;
     private static final float ESCALA_FONT = 2f;
 
     private final MiJuegoPrincipal juego;
@@ -22,6 +22,7 @@ public class JuegoScreen implements Screen {
 
     private int puntuacion;
     private boolean juegoTerminado;
+    private boolean juegoPausado;
 
     public JuegoScreen(MiJuegoPrincipal juego) {
         System.out.println("JuegoScreen: Constructor llamado");
@@ -39,18 +40,7 @@ public class JuegoScreen implements Screen {
 
             float velocidad = juego.dificultadSeleccionada.getVelocidad() * VELOCIDAD_BASE;
 
-            snake = new Snake(velocidad, TAMANIO_SERPIENTE);
-            System.out.println("Snake creada con velocidad: " + velocidad);
-
-            fruta = new Frutas();
-            System.out.println("Frutas creadas");
-
-            font = new BitmapFont();
-            font.setColor(Color.WHITE);
-            font.getData().setScale(ESCALA_FONT);
-
-            puntuacion = 0;
-            juegoTerminado = false;
+            inicializarPartida(velocidad);
 
             System.out.println("JuegoScreen inicializado correctamente");
 
@@ -72,7 +62,11 @@ public class JuegoScreen implements Screen {
             Gdx.gl.glClearColor(0.1f, 0.1f, 0.15f, 1);
             Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-            if (!juegoTerminado && snake != null) {
+            if (!juegoTerminado && Gdx.input.isKeyJustPressed(Input.Keys.P)) {
+                juegoPausado = !juegoPausado;
+            }
+
+            if (!juegoTerminado && !juegoPausado && snake != null) {
                 manejarInput();
                 snake.actualizar(delta);
                 verificarColisionConFruta();
@@ -93,12 +87,22 @@ public class JuegoScreen implements Screen {
             if (font != null) {
                 font.draw(juego.batch, "Puntuación: " + puntuacion, 20, Gdx.graphics.getHeight() - 20);
                 font.draw(juego.batch, "ESC para volver al menú", 20, Gdx.graphics.getHeight() - 50);
+                font.draw(juego.batch, "P para pausar/reanudar", 20, Gdx.graphics.getHeight() - 80);
             }
 
             if (juegoTerminado && font != null) {
                 font.draw(juego.batch, "GAME OVER! Presiona ESPACIO para reiniciar",
                     Gdx.graphics.getWidth() / 2f - 400,
                     Gdx.graphics.getHeight() / 2f);
+            }
+
+            if (juegoPausado && !juegoTerminado && font != null) {
+                font.draw(juego.batch, "PAUSA - Presiona P para continuar",
+                    Gdx.graphics.getWidth() / 2f - 280,
+                    Gdx.graphics.getHeight() / 2f);
+                font.draw(juego.batch, "ESC para volver al menu",
+                    Gdx.graphics.getWidth() / 2f - 210,
+                    Gdx.graphics.getHeight() / 2f - 40);
             }
 
             juego.batch.end();
@@ -108,13 +112,43 @@ public class JuegoScreen implements Screen {
             }
 
             if (juegoTerminado && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-                show();
+                reiniciarPartida();
             }
 
         } catch (Exception e) {
             System.err.println("ERROR en render de JuegoScreen:");
             e.printStackTrace();
         }
+    }
+
+
+    private void inicializarPartida(float velocidad) {
+        liberarRecursosPartida();
+
+        snake = new Snake(velocidad, TAMANIO_SERPIENTE);
+        System.out.println("Snake creada con velocidad: " + velocidad);
+
+        fruta = new Frutas();
+        fruta.regenerar(snake.getCuerpo(), snake.getTamano());
+        System.out.println("Frutas creadas");
+
+        if (font == null) {
+            font = new BitmapFont();
+            font.setColor(Color.WHITE);
+            font.getData().setScale(ESCALA_FONT);
+        }
+
+        puntuacion = 0;
+        juegoTerminado = false;
+        juegoPausado = false;
+    }
+
+    private void reiniciarPartida() {
+        if (juego.dificultadSeleccionada == null) {
+            juego.dificultadSeleccionada = Dificultad.NORMAL;
+        }
+        float velocidad = juego.dificultadSeleccionada.getVelocidad() * VELOCIDAD_BASE;
+        inicializarPartida(velocidad);
     }
 
     private void manejarInput() {
@@ -153,7 +187,7 @@ public class JuegoScreen implements Screen {
 
         if (areaCabeza.overlaps(fruta.getRect())) {
             snake.comer();
-            fruta.regenerar();
+            fruta.regenerar(snake.getCuerpo(), snake.getTamano());
             puntuacion += 10;
             System.out.println("Fruta comida! Puntuación: " + puntuacion);
         }
@@ -215,11 +249,24 @@ public class JuegoScreen implements Screen {
     @Override
     public void dispose() {
         try {
-            if (snake != null) snake.dispose();
-            if (fruta != null) fruta.dispose();
-            if (font != null) font.dispose();
+            liberarRecursosPartida();
+            if (font != null) {
+                font.dispose();
+                font = null;
+            }
         } catch (Exception e) {
             System.err.println("Error al hacer dispose: " + e.getMessage());
+        }
+    }
+
+    private void liberarRecursosPartida() {
+        if (snake != null) {
+            snake.dispose();
+            snake = null;
+        }
+        if (fruta != null) {
+            fruta.dispose();
+            fruta = null;
         }
     }
 }

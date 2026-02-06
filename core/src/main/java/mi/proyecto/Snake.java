@@ -5,7 +5,9 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector2;
+import java.util.Collections;
 import java.util.LinkedList;
+import java.util.List;
 
 public class Snake {
 
@@ -67,10 +69,18 @@ public class Snake {
         Vector2 nueva = new Vector2(cabeza);
 
         switch (direccion) {
-            case ARRIBA:    nueva.y += velocidad * delta; break;
-            case ABAJO:     nueva.y -= velocidad * delta; break;
-            case IZQUIERDA: nueva.x -= velocidad * delta; break;
-            case DERECHA:   nueva.x += velocidad * delta; break;
+            case ARRIBA:
+                nueva.y += velocidad * delta;
+                break;
+            case ABAJO:
+                nueva.y -= velocidad * delta;
+                break;
+            case IZQUIERDA:
+                nueva.x -= velocidad * delta;
+                break;
+            case DERECHA:
+                nueva.x += velocidad * delta;
+                break;
         }
 
         cuerpo.addFirst(nueva);
@@ -95,8 +105,8 @@ public class Snake {
         return cuerpo.getFirst();
     }
 
-    public LinkedList<Vector2> getCuerpo() {
-        return cuerpo;
+    public List<Vector2> getCuerpo() {
+        return Collections.unmodifiableList(cuerpo);
     }
 
     public float getTamano() {

@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
+import java.util.List;
 import java.util.Random;
 
 public class Frutas {
@@ -14,6 +15,7 @@ public class Frutas {
     private static final float MARGEN = 50f;
 
     private final Random random;
+    private final Rectangle area;
 
     private Texture textura;
     private float posicionX;
@@ -21,6 +23,7 @@ public class Frutas {
 
     public Frutas() {
         random = new Random();
+        area = new Rectangle();
 
         try {
             if (Gdx.files.internal("Frutaimg.png").exists()) {
@@ -55,6 +58,24 @@ public class Frutas {
 
         posicionX = MARGEN + random.nextFloat() * rangoX;
         posicionY = MARGEN + random.nextFloat() * rangoY;
+        actualizarArea();
+    }
+
+    public void regenerar(List<Vector2> posicionesOcupadas, float tamanoSerpiente) {
+        if (posicionesOcupadas == null || posicionesOcupadas.isEmpty()) {
+            regenerar();
+            return;
+        }
+
+        int intentosMaximos = 100;
+        for (int i = 0; i < intentosMaximos; i++) {
+            regenerar();
+            if (!estaEncimaDeSerpiente(posicionesOcupadas, tamanoSerpiente)) {
+                return;
+            }
+        }
+
+        // fallback: si no encuentra espacio tras varios intentos, deja la última posición generada
     }
 
     public void dibujar(SpriteBatch batch) {
@@ -62,7 +83,7 @@ public class Frutas {
     }
 
     public Rectangle getRect() {
-        return new Rectangle(posicionX, posicionY, TAMANIO, TAMANIO);
+        return area;
     }
 
     public Vector2 getPosicion() {
@@ -71,5 +92,19 @@ public class Frutas {
 
     public void dispose() {
         if (textura != null) textura.dispose();
+    }
+
+    private boolean estaEncimaDeSerpiente(List<Vector2> posicionesOcupadas, float tamanoSerpiente) {
+        float tolerancia = Math.max(1f, tamanoSerpiente * 0.7f);
+        for (Vector2 segmento : posicionesOcupadas) {
+            if (Math.abs(segmento.x - posicionX) < tolerancia && Math.abs(segmento.y - posicionY) < tolerancia) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void actualizarArea() {
+        area.set(posicionX, posicionY, TAMANIO, TAMANIO);
     }
 }
