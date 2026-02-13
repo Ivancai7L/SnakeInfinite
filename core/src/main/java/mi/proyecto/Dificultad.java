@@ -4,8 +4,7 @@ public enum Dificultad {
 
     FACIL(2),
     NORMAL(4),
-    DIFICIL(6),
-    IMPOSIBLE(10);
+    DIFICIL(6);
 
     private final float velocidad;
 

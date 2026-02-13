@@ -1,12 +1,17 @@
 package mi.proyecto;
 
 import com.badlogic.gdx.Game;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 
 public class MiJuegoPrincipal extends Game {
 
     public SpriteBatch batch;
     public Dificultad dificultadSeleccionada;
+    private Music musica;
+    private float volumenMusica = 0.5f;
+    private boolean mute;
 
     @Override
     public void create() {
@@ -14,6 +19,7 @@ public class MiJuegoPrincipal extends Game {
             System.out.println("MiJuegoPrincipal: create() iniciado");
             batch = new SpriteBatch();
             System.out.println("MiJuegoPrincipal: SpriteBatch creado");
+            iniciarMusica();
             mostrarMenu();
             System.out.println("MiJuegoPrincipal: create() completado");
         } catch (Exception e) {
@@ -60,11 +66,78 @@ public class MiJuegoPrincipal extends Game {
         setScreen(new JuegoScreen(this));
     }
 
+    public void mostrarMenuOnline() {
+        try {
+            setScreen(new OnlineMenuScreen(this));
+        } catch (Exception e) {
+            System.err.println("MiJuegoPrincipal: ERROR en mostrarMenuOnline()");
+            e.printStackTrace();
+        }
+    }
+
+    public void iniciarJuegoOnline(OnlineSession session, boolean host) {
+        iniciarJuegoOnline(session, host, Dificultad.NORMAL);
+    }
+
+    public void iniciarJuegoOnline(OnlineSession session, boolean host, Dificultad dificultadOnline) {
+        try {
+            Dificultad dificultad = dificultadOnline == null ? Dificultad.NORMAL : dificultadOnline;
+            setScreen(new OnlineJuegoScreen(this, session, host, dificultad));
+        } catch (Exception e) {
+            System.err.println("MiJuegoPrincipal: ERROR en iniciarJuegoOnline()");
+            e.printStackTrace();
+        }
+    }
+
+    private void iniciarMusica() {
+        try {
+            if (musica == null && Gdx.files.internal("Musicasnake.mp3").exists()) {
+                musica = Gdx.audio.newMusic(Gdx.files.internal("Musicasnake.mp3"));
+                musica.setLooping(true);
+                musica.setVolume(volumenMusica);
+                musica.play();
+            }
+        } catch (Exception e) {
+            System.err.println("MiJuegoPrincipal: ERROR al iniciar música");
+            e.printStackTrace();
+        }
+    }
+
+    public void setVolumenMusica(float volumen) {
+        volumenMusica = Math.max(0f, Math.min(1f, volumen));
+        if (!mute && musica != null) {
+            musica.setVolume(volumenMusica);
+        }
+    }
+
+    public float getVolumenMusica() {
+        return volumenMusica;
+    }
+
+    public void alternarMuteMusica() {
+        mute = !mute;
+        if (musica != null) {
+            musica.setVolume(mute ? 0f : volumenMusica);
+        }
+    }
+
+    public boolean isMusicaMute() {
+        return mute;
+    }
+
+    public void ajustarVolumenMusica(float delta) {
+        setVolumenMusica(volumenMusica + delta);
+    }
+
     @Override
     public void dispose() {
         try {
             System.out.println("MiJuegoPrincipal: dispose() llamado");
             batch.dispose();
+            if (musica != null) {
+                musica.dispose();
+                musica = null;
+            }
         } catch (Exception e) {
             System.err.println("MiJuegoPrincipal: ERROR en dispose()");
             e.printStackTrace();

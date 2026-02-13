@@ -83,6 +83,21 @@ public class Snake {
                 break;
         }
 
+        float maxX = Gdx.graphics.getWidth() - tamano;
+        float maxY = Gdx.graphics.getHeight() - tamano;
+
+        if (nueva.x < 0f) {
+            nueva.x = maxX;
+        } else if (nueva.x > maxX) {
+            nueva.x = 0f;
+        }
+
+        if (nueva.y < 0f) {
+            nueva.y = maxY;
+        } else if (nueva.y > maxY) {
+            nueva.y = 0f;
+        }
+
         cuerpo.addFirst(nueva);
         if (crecimientoPendiente > 0) {
             crecimientoPendiente--;

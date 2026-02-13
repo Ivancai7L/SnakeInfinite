@@ -4,107 +4,192 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
-import java.util.List;
-import java.util.Random;
 
 public class Frutas {
 
-    private static final float TAMANIO = 20f;
-    private static final float MARGEN = 50f;
+    public enum TipoFruta {
+        MANZANA,
+        BANANA,
+        PERA
+    }
 
-    private final Random random;
-    private final Rectangle area;
+    private static final float TAMANIO_BASE = 25f;
+    private static final float ESCALA_PERA = 1.15f;
 
-    private Texture textura;
-    private float posicionX;
-    private float posicionY;
+    private Texture texturaManzana;
+    private Texture texturaBanana;
+    private Texture texturaPera;
+    private Vector2 posicion;
+    private TipoFruta tipo;
+    private float probBanana;
+    private float probPera;
 
     public Frutas() {
-        random = new Random();
-        area = new Rectangle();
-
-        try {
-            if (Gdx.files.internal("Frutaimg.png").exists()) {
-                this.textura = new Texture("Frutaimg.png");
-                System.out.println("Textura Frutaimg.png cargada");
-            } else {
-                this.textura = crearTexturaColor(255, 0, 0);
-                System.out.println("Textura Frutaimg.png no encontrada, usando textura roja generada");
-            }
-        } catch (Exception e) {
-            System.out.println("Error al cargar Frutaimg.png: " + e.getMessage());
-            this.textura = crearTexturaColor(255, 0, 0);
-        }
-
-        regenerar();
-    }
-
-    private Texture crearTexturaColor(int r, int g, int b) {
-        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGB888);
-        pixmap.setColor(r / 255f, g / 255f, b / 255f, 1f);
-        pixmap.fill();
-        Texture tex = new Texture(pixmap);
-        pixmap.dispose();
-        return tex;
-    }
-
-    public void regenerar() {
-        float anchoVentana = Gdx.graphics.getWidth();
-        float altoVentana = Gdx.graphics.getHeight();
-        float rangoX = Math.max(0f, anchoVentana - 2 * MARGEN - TAMANIO);
-        float rangoY = Math.max(0f, altoVentana - 2 * MARGEN - TAMANIO);
-
-        posicionX = MARGEN + random.nextFloat() * rangoX;
-        posicionY = MARGEN + random.nextFloat() * rangoY;
-        actualizarArea();
-    }
-
-    public void regenerar(List<Vector2> posicionesOcupadas, float tamanoSerpiente) {
-        if (posicionesOcupadas == null || posicionesOcupadas.isEmpty()) {
-            regenerar();
-            return;
-        }
-
-        int intentosMaximos = 100;
-        for (int i = 0; i < intentosMaximos; i++) {
-            regenerar();
-            if (!estaEncimaDeSerpiente(posicionesOcupadas, tamanoSerpiente)) {
-                return;
-            }
-        }
-
-        // fallback: si no encuentra espacio tras varios intentos, deja la última posición generada
+        texturaManzana = cargarTexturaConFallback("Frutaimg.png", 220, 50, 50);
+        texturaBanana = cargarTexturaConFallback("banana.png", 255, 225, 60);
+        texturaPera = cargarTexturaConFallback("pera.png", 120, 220, 90);
+        posicion = new Vector2();
+        tipo = TipoFruta.MANZANA;
+        probBanana = 0.10f;
+        probPera = 0.08f;
+        generarNuevaPosicion();
     }
 
     public void dibujar(SpriteBatch batch) {
-        batch.draw(textura, posicionX, posicionY, TAMANIO, TAMANIO);
+        Texture textura = obtenerTexturaActual();
+        float tam = obtenerTamanoActual();
+        batch.draw(textura, posicion.x, posicion.y, tam, tam);
     }
 
-    public Rectangle getRect() {
-        return area;
+    public void generarNuevaPosicion() {
+        float tam = obtenerTamanoActual();
+        int columnas = Math.max(1, (int) (Gdx.graphics.getWidth() / TAMANIO_BASE));
+        int filas = Math.max(1, (int) (Gdx.graphics.getHeight() / TAMANIO_BASE));
+
+        float x = MathUtils.random(0, columnas - 1) * TAMANIO_BASE;
+        float y = MathUtils.random(0, filas - 1) * TAMANIO_BASE;
+
+        x = Math.min(x, Gdx.graphics.getWidth() - tam);
+        y = Math.min(y, Gdx.graphics.getHeight() - tam);
+        posicion.set(x, y);
+
+        sortearTipo();
+    }
+
+    private void sortearTipo() {
+        float r = MathUtils.random();
+        if (r < probPera) {
+            tipo = TipoFruta.PERA;
+        } else if (r < probPera + probBanana) {
+            tipo = TipoFruta.BANANA;
+        } else {
+            tipo = TipoFruta.MANZANA;
+        }
+    }
+
+    public void actualizarTipoPorPuntuacion(int puntuacion) {
+        if (puntuacion >= 80) {
+            probBanana = 0.20f;
+            probPera = 0.16f;
+        } else if (puntuacion >= 40) {
+            probBanana = 0.16f;
+            probPera = 0.12f;
+        } else {
+            probBanana = 0.10f;
+            probPera = 0.08f;
+        }
+    }
+
+    public void actualizarProbabilidades(Dificultad dificultad) {
+        if (dificultad == null) {
+            dificultad = Dificultad.NORMAL;
+        }
+
+        switch (dificultad) {
+            case FACIL:
+                probBanana = Math.max(probBanana, 0.12f);
+                probPera = Math.max(probPera, 0.10f);
+                break;
+            case DIFICIL:
+                probBanana = Math.max(probBanana, 0.18f);
+                probPera = Math.max(probPera, 0.14f);
+                break;
+            case NORMAL:
+            default:
+                probBanana = Math.max(probBanana, 0.14f);
+                probPera = Math.max(probPera, 0.11f);
+                break;
+        }
+    }
+
+    public Rectangle obtenerRectangulo() {
+        float tam = obtenerTamanoActual();
+        return new Rectangle(posicion.x, posicion.y, tam, tam);
+    }
+
+    public int getPuntos() {
+        switch (tipo) {
+            case BANANA:
+                return 15;
+            case PERA:
+                return 20;
+            case MANZANA:
+            default:
+                return 10;
+        }
+    }
+
+    public TipoFruta getTipo() {
+        return tipo;
     }
 
     public Vector2 getPosicion() {
-        return new Vector2(posicionX, posicionY);
+        return posicion;
+    }
+
+    public void setPosicion(float x, float y) {
+        float tam = obtenerTamanoActual();
+        float clampedX = Math.max(0, Math.min(x, Gdx.graphics.getWidth() - tam));
+        float clampedY = Math.max(0, Math.min(y, Gdx.graphics.getHeight() - tam));
+        posicion.set(clampedX, clampedY);
+    }
+
+    public void setTipo(TipoFruta nuevoTipo) {
+        if (nuevoTipo != null) {
+            this.tipo = nuevoTipo;
+        }
+    }
+
+    private float obtenerTamanoActual() {
+        if (tipo == TipoFruta.PERA) {
+            return TAMANIO_BASE * ESCALA_PERA;
+        }
+        return TAMANIO_BASE;
+    }
+
+    private Texture obtenerTexturaActual() {
+        switch (tipo) {
+            case BANANA:
+                return texturaBanana != null ? texturaBanana : texturaManzana;
+            case PERA:
+                return texturaPera != null ? texturaPera : texturaManzana;
+            case MANZANA:
+            default:
+                return texturaManzana;
+        }
+    }
+
+    private Texture cargarTexturaConFallback(String ruta, int r, int g, int b) {
+        try {
+            if (Gdx.files.internal(ruta).exists()) {
+                return new Texture(ruta);
+            }
+        } catch (Exception ignored) {
+        }
+
+        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
+        pixmap.setColor(r / 255f, g / 255f, b / 255f, 1f);
+        pixmap.fill();
+        Texture fallback = new Texture(pixmap);
+        pixmap.dispose();
+        return fallback;
     }
 
     public void dispose() {
-        if (textura != null) textura.dispose();
-    }
-
-    private boolean estaEncimaDeSerpiente(List<Vector2> posicionesOcupadas, float tamanoSerpiente) {
-        float tolerancia = Math.max(1f, tamanoSerpiente * 0.7f);
-        for (Vector2 segmento : posicionesOcupadas) {
-            if (Math.abs(segmento.x - posicionX) < tolerancia && Math.abs(segmento.y - posicionY) < tolerancia) {
-                return true;
-            }
+        if (texturaManzana != null) {
+            texturaManzana.dispose();
+            texturaManzana = null;
         }
-        return false;
-    }
-
-    private void actualizarArea() {
-        area.set(posicionX, posicionY, TAMANIO, TAMANIO);
+        if (texturaBanana != null) {
+            texturaBanana.dispose();
+            texturaBanana = null;
+        }
+        if (texturaPera != null) {
+            texturaPera.dispose();
+            texturaPera = null;
+        }
     }
 }

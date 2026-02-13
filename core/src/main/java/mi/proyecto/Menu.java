@@ -2,7 +2,6 @@ package mi.proyecto;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -26,7 +25,6 @@ public class Menu implements Screen {
     private final MiJuegoPrincipal game;
     private Stage stage;
     private Texture fondo;
-    private Music musica;
 
     private Sound hoverSound;
     private Sound clickSound;
@@ -40,6 +38,7 @@ public class Menu implements Screen {
     private Texture texPerilla;
     private Texture texFlechitas;
     private Texture texP;
+    private Texture texOnline;
 
     private ImageButton btnJugar;
     private ImageButton btnOpciones;
@@ -47,8 +46,10 @@ public class Menu implements Screen {
     private ImageButton btnSalir;
     private ImageButton btnVolverOpciones;
     private ImageButton btnVolverControles;
+    private ImageButton btnOnline;
 
     private Slider sliderVolumen;
+    private Label lblMuteHint;
     private Table tablaPrincipal;
     private Table tablaOpciones;
     private Table tablaControles;
@@ -61,11 +62,6 @@ public class Menu implements Screen {
     public void show() {
         fondo = new Texture("Fondosnake.jpg");
 
-        musica = Gdx.audio.newMusic(Gdx.files.internal("Musicasnake.mp3"));
-        musica.setLooping(true);
-        musica.setVolume(0.5f);
-        musica.play();
-
         hoverSound = Gdx.audio.newSound(Gdx.files.internal("hover.wav"));
         clickSound = Gdx.audio.newSound(Gdx.files.internal("sonidobotones.wav"));
 
@@ -73,6 +69,7 @@ public class Menu implements Screen {
         Gdx.input.setInputProcessor(stage);
 
         texJugar = cargarTexturaConFallback("jugar.png", 40, 180, 40);
+        texOnline = cargarTexturaConFallback("online.png", 40, 200, 200);
         texOpciones = cargarTexturaConFallback("opciones.png", 60, 120, 220);
         texControles = cargarTexturaConFallback("controles.png", 220, 150, 40);
         texSalir = cargarTexturaConFallback("Salir.png", 200, 60, 60);
@@ -82,12 +79,14 @@ public class Menu implements Screen {
         texFlechitas = cargarTexturaConFallback("flechitas.png", 80, 160, 220);
         texP = cargarTexturaConFallback("p.png", 200, 80, 180);
 
+
         btnJugar = new ImageButton(new TextureRegionDrawable(texJugar));
         btnOpciones = new ImageButton(new TextureRegionDrawable(texOpciones));
         btnControles = new ImageButton(new TextureRegionDrawable(texControles));
         btnSalir = new ImageButton(new TextureRegionDrawable(texSalir));
         btnVolverOpciones = new ImageButton(new TextureRegionDrawable(texVolver));
         btnVolverControles = new ImageButton(new TextureRegionDrawable(texVolver));
+        btnOnline = new ImageButton(new TextureRegionDrawable(texOnline));
 
         addHoverEffect(btnJugar);
         addHoverEffect(btnOpciones);
@@ -95,12 +94,12 @@ public class Menu implements Screen {
         addHoverEffect(btnSalir);
         addHoverEffect(btnVolverOpciones);
         addHoverEffect(btnVolverControles);
+        addHoverEffect(btnOnline);
 
         btnJugar.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 clickSound.play(0.8f);
-                musica.stop();
                 game.mostrarSeleccionDificultad();
             }
         });
@@ -121,11 +120,18 @@ public class Menu implements Screen {
             }
         });
 
+        btnOnline.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                clickSound.play(0.8f);
+                game.mostrarMenuOnline();
+            }
+        });
+
         btnSalir.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 clickSound.play(0.8f);
-                musica.stop();
                 Gdx.app.exit();
             }
         });
@@ -162,6 +168,8 @@ public class Menu implements Screen {
         tablaPrincipal.row();
         tablaPrincipal.add(btnControles).width(250).height(100).pad(12);
         tablaPrincipal.row();
+        tablaPrincipal.add(btnOnline).width(250).height(100).pad(12);
+        tablaPrincipal.row();
         tablaPrincipal.add(btnSalir).width(250).height(100).pad(12);
         stage.addActor(tablaPrincipal);
     }
@@ -189,15 +197,22 @@ public class Menu implements Screen {
         sliderStyle.knob = perillaDrawable;
 
         sliderVolumen = new Slider(0f, 1f, 0.01f, false, sliderStyle);
-        sliderVolumen.setValue(musica.getVolume());
+        sliderVolumen.setValue(game.getVolumenMusica());
         sliderVolumen.addListener(event -> {
-            musica.setVolume(sliderVolumen.getValue());
+            game.setVolumenMusica(sliderVolumen.getValue());
             return false;
         });
+
+        Label lblMute = new Label("M para mutear / desmutear", estiloTexto);
+        lblMuteHint = new Label("Estado: " + (game.isMusicaMute() ? "MUTE" : "SONANDO"), estiloTexto);
 
         tablaOpciones.add(lblVolumen).padBottom(20);
         tablaOpciones.row();
         tablaOpciones.add(sliderVolumen).width(300).height(40).pad(10);
+        tablaOpciones.row();
+        tablaOpciones.add(lblMute).padTop(8).padBottom(8);
+        tablaOpciones.row();
+        tablaOpciones.add(lblMuteHint).padBottom(10);
         tablaOpciones.row();
         tablaOpciones.add(btnVolverOpciones).width(250).height(100).pad(15);
         stage.addActor(tablaOpciones);
@@ -278,8 +293,19 @@ public class Menu implements Screen {
 
     @Override
     public void render(float delta) {
+        if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.M)) {
+            game.alternarMuteMusica();
+        }
+
         Gdx.gl.glClearColor(0, 0, 0, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        if (sliderVolumen != null && Math.abs(sliderVolumen.getValue() - game.getVolumenMusica()) > 0.001f) {
+            sliderVolumen.setValue(game.getVolumenMusica());
+        }
+        if (lblMuteHint != null) {
+            lblMuteHint.setText("Estado: " + (game.isMusicaMute() ? "MUTE" : "SONANDO"));
+        }
 
         game.batch.begin();
         game.batch.draw(fondo, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -311,7 +337,6 @@ public class Menu implements Screen {
     @Override
     public void dispose() {
         fondo.dispose();
-        musica.dispose();
         stage.dispose();
         hoverSound.dispose();
         clickSound.dispose();
@@ -325,6 +350,7 @@ public class Menu implements Screen {
         texPerilla.dispose();
         texFlechitas.dispose();
         texP.dispose();
+        texOnline.dispose();
     }
 
     private enum SeccionMenu {
