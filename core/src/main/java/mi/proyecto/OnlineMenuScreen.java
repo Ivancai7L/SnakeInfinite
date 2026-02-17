@@ -22,6 +22,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import mi.proyecto.cliente.HiloCliente;
+import mi.proyecto.servidor.DatosServidor;
+import mi.proyecto.servidor.HiloServidor;
+
 
 public class OnlineMenuScreen implements Screen {
 

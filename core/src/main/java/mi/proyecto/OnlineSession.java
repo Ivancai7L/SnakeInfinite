@@ -1,4 +1,3 @@
-// core/src/main/java/mi/proyecto/OnlineSession.java
 package mi.proyecto;
 
 import java.io.BufferedReader;
