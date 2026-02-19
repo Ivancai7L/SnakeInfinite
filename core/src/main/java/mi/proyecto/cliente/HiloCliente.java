@@ -1,11 +1,14 @@
 package mi.proyecto.cliente;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import mi.proyecto.Dificultad;
 import mi.proyecto.OnlineSession;
 
 public class HiloCliente extends Thread {
+
+    private static final int CONNECT_TIMEOUT_MS = 4000;
 
     public interface Listener {
         void onEstado(String estado);
@@ -30,11 +33,17 @@ public class HiloCliente extends Thread {
         listener.onEstado("Conectando a " + ip + ":" + puerto + "...");
 
         try {
-            Socket socket = new Socket(ip, puerto);
+            Socket socket = new Socket();
+            socket.connect(new InetSocketAddress(ip, puerto), CONNECT_TIMEOUT_MS);
             OnlineSession session = new OnlineSession(socket);
             session.enviar("STATUS:CLIENTE_CONECTADO");
 
             String handshake = leerSiguienteNoStatus(session);
+            if (handshake == null) {
+                session.cerrar();
+                listener.onError("Conexión cerrada por el servidor antes del inicio");
+                return;
+            }
             if (!"ROLE:CLIENT".equals(handshake)) {
                 session.cerrar();
                 listener.onError("Conexión inválida: servidor no respondió ROLE:CLIENT");

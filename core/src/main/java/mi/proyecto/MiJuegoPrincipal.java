@@ -75,6 +75,24 @@ public class MiJuegoPrincipal extends Game {
         }
     }
 
+
+    public void mostrarPantallaServidorOnline() {
+        try {
+            setScreen(new PantallaServidorOnline(this));
+        } catch (Exception e) {
+            System.err.println("MiJuegoPrincipal: ERROR en mostrarPantallaServidorOnline()");
+            e.printStackTrace();
+        }
+    }
+
+    public void mostrarPantallaClienteOnline() {
+        try {
+            setScreen(new PantallaClienteOnline(this));
+        } catch (Exception e) {
+            System.err.println("MiJuegoPrincipal: ERROR en mostrarPantallaClienteOnline()");
+            e.printStackTrace();
+        }
+    }
     public void iniciarJuegoOnline(OnlineSession session, boolean host) {
         iniciarJuegoOnline(session, host, Dificultad.NORMAL);
     }
