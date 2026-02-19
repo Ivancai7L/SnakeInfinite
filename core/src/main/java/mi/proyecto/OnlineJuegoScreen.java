@@ -20,6 +20,12 @@ public class OnlineJuegoScreen implements Screen {
 
     private static final float VELOCIDAD_BASE = 60f;
     private static final float TAMANIO = 25f;
+    private static final float MAX_DELTA_SEGUNDOS = 1f / 20f;
+    private static final float CAMPO_ANCHO = 1080f;
+    private static final float CAMPO_ALTO = 720f;
+    private static final String TEXTURA_JUGADOR_1 = "Snakeimg.png";
+    private static final String TEXTURA_JUGADOR_2 = "Snakeimg2.png";
+    private static final String TEXTURA_FRUTA = "Frutaimg.png";
 
     private final MiJuegoPrincipal game;
     private final OnlineSession session;
@@ -41,6 +47,8 @@ public class OnlineJuegoScreen implements Screen {
     private boolean juegoTerminado;
     private int puntajeServidor;
     private int puntajeCliente;
+    private boolean enMenu;
+    private volatile boolean estadoRemotoRecibido;
 
     public OnlineJuegoScreen(MiJuegoPrincipal game, OnlineSession session, boolean servidor, Dificultad dificultadPartida) {
         this.game = game;
@@ -52,7 +60,7 @@ public class OnlineJuegoScreen implements Screen {
     @Override
     public void show() {
         float velocidad = VELOCIDAD_BASE * dificultadPartida.getVelocidad();
-        snakeLocal = new Snake(velocidad, TAMANIO);
+        snakeLocal = new Snake(velocidad, TAMANIO, servidor ? TEXTURA_JUGADOR_1 : TEXTURA_JUGADOR_2);
         posicionarSnakeInicial();
 
         fondoJuego = cargarTexturaConFallback("tierrafondo.png", 28, 45, 30);
@@ -60,8 +68,8 @@ public class OnlineJuegoScreen implements Screen {
         font = new BitmapFont();
         font.getData().setScale(2f);
         font.setColor(Color.ORANGE);
-        texturaRemota = crearTexturaColor(70, 160, 255);
-        texturaFruta = crearTexturaColor(255, 90, 90);
+        texturaRemota = cargarTexturaConFallback(servidor ? TEXTURA_JUGADOR_2 : TEXTURA_JUGADOR_1, 70, 160, 255);
+        texturaFruta = cargarTexturaConFallback(TEXTURA_FRUTA, 255, 90, 90);
 
         if (servidor) {
             regenerarFrutaServidor();
@@ -69,12 +77,13 @@ public class OnlineJuegoScreen implements Screen {
         }
 
         iniciarReceptor();
+        session.enviar("STATUS:" + (servidor ? "SERVIDOR_EN_PARTIDA" : "CLIENTE_EN_PARTIDA"));
     }
 
     private void posicionarSnakeInicial() {
         if (snakeLocal == null || snakeLocal.getCuerpo().isEmpty()) return;
-        float y = Gdx.graphics.getHeight() / 2f;
-        float x = servidor ? Gdx.graphics.getWidth() * 0.25f : Gdx.graphics.getWidth() * 0.75f;
+        float y = CAMPO_ALTO / 2f;
+        float x = servidor ? CAMPO_ANCHO * 0.25f : CAMPO_ANCHO * 0.75f;
         snakeLocal.getCabeza().set(x, y);
     }
 
@@ -88,15 +97,6 @@ public class OnlineJuegoScreen implements Screen {
         Texture fallback = new Texture(pixmap);
         pixmap.dispose();
         return fallback;
-    }
-
-    private Texture crearTexturaColor(int r, int g, int b) {
-        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGB888);
-        pixmap.setColor(r / 255f, g / 255f, b / 255f, 1f);
-        pixmap.fill();
-        Texture tex = new Texture(pixmap);
-        pixmap.dispose();
-        return tex;
     }
 
     private void iniciarReceptor() {
@@ -145,6 +145,7 @@ public class OnlineJuegoScreen implements Screen {
             synchronized (cuerpoRemoto) {
                 cuerpoRemoto.clear();
                 cuerpoRemoto.addAll(nuevo);
+                estadoRemotoRecibido = !cuerpoRemoto.isEmpty();
             }
             return;
         }
@@ -182,8 +183,15 @@ public class OnlineJuegoScreen implements Screen {
             return;
         }
 
+        if (msg.startsWith("STATUS:")) {
+            String estadoRed = msg.substring(7).replace('_', ' ');
+            if (!juegoTerminado) {
+                estadoConexion = estadoRed;
+            }
+            return;
+        }
+
         if (msg.startsWith("END:")) {
-            // END:<GANADOR>:<MOTIVO>:<serverScore>:<clientScore>
             String[] values = msg.split(":", 5);
             if (values.length >= 5) {
                 try {
@@ -216,6 +224,7 @@ public class OnlineJuegoScreen implements Screen {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         if (!juegoTerminado) {
+            delta = Math.min(delta, MAX_DELTA_SEGUNDOS);
             manejarInput();
             snakeLocal.actualizar(delta);
             enviarEstadoLocal();
@@ -237,16 +246,12 @@ public class OnlineJuegoScreen implements Screen {
         snakeLocal.dibujar(game.batch);
         dibujarRemoto(game.batch);
 
-        String rol = servidor ? "SERVIDOR" : "CLIENTE";
-        int miPuntaje = servidor ? puntajeServidor : puntajeCliente;
-        int puntajeRival = servidor ? puntajeCliente : puntajeServidor;
-
-        font.draw(game.batch, "Online 2P - " + rol + " | " + dificultadPartida.name(), 20, Gdx.graphics.getHeight() - 20);
-        font.draw(game.batch, "Mi puntaje: " + miPuntaje + " | Rival: " + puntajeRival, 20, Gdx.graphics.getHeight() - 55);
-        font.draw(game.batch, "Mueve: WASD/Flechas | ESC: menu", 20, Gdx.graphics.getHeight() - 90);
-        font.draw(game.batch, estadoConexion, 20, Gdx.graphics.getHeight() - 125);
+        dibujarTextoConSombra("Online 2P | " + dificultadPartida.name(), 20, Gdx.graphics.getHeight() - 20, Color.GOLD);
+        dibujarTextoConSombra("Jugador 1 puntos: " + puntajeServidor + " | Jugador 2 puntos: " + puntajeCliente, 20, Gdx.graphics.getHeight() - 55, Color.WHITE);
+        dibujarTextoConSombra("Mueve: WASD/Flechas | ESC: menu", 20, Gdx.graphics.getHeight() - 90, new Color(0.80f, 0.95f, 1f, 1f));
+        dibujarTextoConSombra(estadoConexion, 20, Gdx.graphics.getHeight() - 125, Color.ORANGE);
         if (juegoTerminado) {
-            font.draw(game.batch, "Fin de partida - ESPACIO para reintentar", 20, Gdx.graphics.getHeight() - 160);
+            dibujarTextoConSombra("Fin de partida - ESPACIO para reintentar", 20, Gdx.graphics.getHeight() - 160, Color.SCARLET);
         }
         game.batch.end();
 
@@ -254,8 +259,19 @@ public class OnlineJuegoScreen implements Screen {
             salirAlMenu();
         }
         if (juegoTerminado && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            game.mostrarMenuOnline();
+            salirAlMenu();
         }
+    }
+
+
+    private void dibujarTextoConSombra(String texto, float x, float y, Color color) {
+        if (font == null) return;
+
+        font.setColor(0f, 0f, 0f, 0.75f);
+        font.draw(game.batch, texto, x + 2f, y - 2f);
+
+        font.setColor(color);
+        font.draw(game.batch, texto, x, y);
     }
 
     private void predecirComidaCliente() {
@@ -294,8 +310,8 @@ public class OnlineJuegoScreen implements Screen {
     }
 
     private void regenerarFrutaServidor() {
-        int columnas = Math.max(1, (int) (Gdx.graphics.getWidth() / TAMANIO));
-        int filas = Math.max(1, (int) (Gdx.graphics.getHeight() / TAMANIO));
+        int columnas = Math.max(1, (int) (CAMPO_ANCHO / TAMANIO));
+        int filas = Math.max(1, (int) (CAMPO_ALTO / TAMANIO));
 
         for (int intento = 0; intento < 120; intento++) {
             float x = MathUtils.random(0, columnas - 1) * TAMANIO;
@@ -378,14 +394,18 @@ public class OnlineJuegoScreen implements Screen {
     }
 
     private void evaluarFinPartidaServidor() {
-        boolean servidorMuere = tocaBorde(snakeLocal.getCabeza()) || colisionConPropioCuerpo(snakeLocal.getCuerpo());
+        boolean servidorMuere = colisionConPropioCuerpo(snakeLocal.getCuerpo());
 
         boolean clienteMuere = false;
         Vector2 cabezaCliente = null;
-        synchronized (cuerpoRemoto) {
-            if (!cuerpoRemoto.isEmpty()) {
-                cabezaCliente = cuerpoRemoto.get(0);
-                clienteMuere = tocaBorde(cabezaCliente) || colisionConPropioCuerpo(cuerpoRemoto);
+        if (estadoRemotoRecibido) {
+            synchronized (cuerpoRemoto) {
+                if (!cuerpoRemoto.isEmpty()) {
+                    cabezaCliente = cuerpoRemoto.get(0);
+                    if (cabezaCliente != null && Float.isFinite(cabezaCliente.x) && Float.isFinite(cabezaCliente.y)) {
+                        clienteMuere = colisionConPropioCuerpo(cuerpoRemoto);
+                    }
+                }
             }
         }
 
@@ -424,10 +444,6 @@ public class OnlineJuegoScreen implements Screen {
         if (clienteMuere) {
             finalizarConGanador("SERVIDOR", "Cliente colisionó");
         }
-    }
-
-    private boolean tocaBorde(Vector2 cabeza) {
-        return cabeza.x < 0 || cabeza.y < 0 || cabeza.x > Gdx.graphics.getWidth() - TAMANIO || cabeza.y > Gdx.graphics.getHeight() - TAMANIO;
     }
 
     private boolean colisionConPropioCuerpo(List<Vector2> cuerpo) {
@@ -477,9 +493,13 @@ public class OnlineJuegoScreen implements Screen {
     }
 
     private void salirAlMenu() {
+        if (enMenu) {
+            return;
+        }
+        enMenu = true;
         corriendo = false;
         session.cerrar();
-        game.mostrarMenu();
+        game.mostrarMenuOnline();
     }
 
     @Override
@@ -515,6 +535,8 @@ public class OnlineJuegoScreen implements Screen {
         if (texturaFruta != null) {
             texturaFruta.dispose();
         }
-        session.cerrar();
+        if (session != null) {
+            session.cerrar();
+        }
     }
 }

@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 public class OnlineSession {
 
@@ -14,8 +15,8 @@ public class OnlineSession {
 
     public OnlineSession(Socket socket) throws IOException {
         this.socket = socket;
-        this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        this.out = new PrintWriter(socket.getOutputStream(), true);
+        this.in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+        this.out = new PrintWriter(socket.getOutputStream(), true, StandardCharsets.UTF_8);
     }
 
     public void enviar(String mensaje) {
@@ -30,9 +31,25 @@ public class OnlineSession {
         return socket == null || socket.isClosed();
     }
 
-    public void cerrar() {
+    public synchronized void cerrar() {
+        if (estaCerrada()) {
+            return;
+        }
         try {
-            socket.close();
+            if (in != null) {
+                in.close();
+            }
+        } catch (IOException ignored) {
+        }
+
+        if (out != null) {
+            out.close();
+        }
+
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
         } catch (IOException ignored) {
         }
     }
