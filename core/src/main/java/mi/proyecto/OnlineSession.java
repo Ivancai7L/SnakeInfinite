@@ -6,11 +6,15 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 
+//Representa la conexión entre los dos jugadores.
+//Envuelve el socket TCP y expone dos métodos simples: enviar() para mandar un mensaje y recibirLinea() para leer uno.
+
 public class OnlineSession {
 
     private final Socket socket;
     private final BufferedReader in;
     private final PrintWriter out;
+    private volatile boolean cerrada;
 
     public OnlineSession(Socket socket) throws IOException {
         this.socket = socket;
@@ -18,8 +22,12 @@ public class OnlineSession {
         this.out = new PrintWriter(socket.getOutputStream(), true);
     }
 
-    public void enviar(String mensaje) {
+    public synchronized void enviar(String mensaje) {
+        if (cerrada) {
+            return;
+        }
         out.println(mensaje);
+        out.flush();
     }
 
     public String recibirLinea() throws IOException {
@@ -27,12 +35,26 @@ public class OnlineSession {
     }
 
     public boolean estaCerrada() {
-        return socket == null || socket.isClosed();
+        return cerrada || socket.isClosed();
     }
 
-    public void cerrar() {
+    public synchronized void cerrar() {
+        if (cerrada) {
+            return;
+        }
+        cerrada = true;
+
         try {
-            socket.close();
+            in.close();
+        } catch (IOException ignored) {
+        }
+
+        out.close();
+
+        try {
+            if (!socket.isClosed()) {
+                socket.close();
+            }
         } catch (IOException ignored) {
         }
     }

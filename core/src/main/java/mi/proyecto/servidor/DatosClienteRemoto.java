@@ -1,5 +1,5 @@
 package mi.proyecto.servidor;
-
+//Guarda la ip y muestra el estado de si esta conectado o no
 public class DatosClienteRemoto {
 
     private final String direccionIp;

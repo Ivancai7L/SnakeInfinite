@@ -16,10 +16,19 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+
+//Maneja todo lo que pasa durante la partida: dibuja las dos serpientes, la fruta y las piedras
+//envía la posición local al rival 20 veces por segundo, y si es el servidor también decide colisiones, puntaje y cuándo termina la partida.
+// Al finalizar muestra el perdedor o ganador según el resultado.
+
 public class OnlineJuegoScreen implements Screen {
 
     private static final float VELOCIDAD_BASE = 60f;
     private static final float TAMANIO = 25f;
+    private static final float INTERVALO_ENVIO_ESTADO = 1f / 20f;
+    private static final float HITBOX_INSET_SNAKE = 4f;
+    private static final float HITBOX_INSET_FRUTA = 3f;
+    private static final float HITBOX_INSET_PIEDRA = 2f;
 
     private final MiJuegoPrincipal game;
     private final OnlineSession session;
@@ -28,11 +37,19 @@ public class OnlineJuegoScreen implements Screen {
 
     private Snake snakeLocal;
     private final List<Vector2> cuerpoRemoto = new ArrayList<>();
+    private final List<Vector2> piedrasOnline = new ArrayList<>();
     private BitmapFont font;
     private Texture fondoJuego;
     private Texture texturaRemota;
-    private Texture texturaFruta;
+    private Texture texturaPiedra;
+    private Texture texturaGameOver;
+    private Texture texturaWinner;
+    private boolean localGano;
+    private Texture texturaFrutaManzana;
+    private Texture texturaFrutaBanana;
+    private Texture texturaFrutaPera;
     private final Vector2 frutaPos = new Vector2(300, 300);
+    private Frutas.TipoFruta frutaTipoActual = Frutas.TipoFruta.MANZANA;
     private int frutaIdActual;
     private int ultimaFrutaComidaPredicha = -1;
 
@@ -41,6 +58,13 @@ public class OnlineJuegoScreen implements Screen {
     private boolean juegoTerminado;
     private int puntajeServidor;
     private int puntajeCliente;
+    private int siguientePiedraPuntuacion;
+    private int intervaloPiedraPuntuacion;
+    private int maxPiedras;
+    private float acumuladorEnvioEstado;
+    private volatile boolean cierreSesionSolicitado;
+    private boolean reinicioSolicitado;
+    private boolean rivalListoParaReiniciar;
 
     public OnlineJuegoScreen(MiJuegoPrincipal game, OnlineSession session, boolean servidor, Dificultad dificultadPartida) {
         this.game = game;
@@ -52,27 +76,61 @@ public class OnlineJuegoScreen implements Screen {
     @Override
     public void show() {
         float velocidad = VELOCIDAD_BASE * dificultadPartida.getVelocidad();
-        snakeLocal = new Snake(velocidad, TAMANIO);
+        String texturaLocal = servidor ? "Snakeimg.png" : "Snakeimg2.png";
+        snakeLocal = new Snake(velocidad, TAMANIO, texturaLocal);
         posicionarSnakeInicial();
 
         fondoJuego = cargarTexturaConFallback("tierrafondo.png", 28, 45, 30);
+        texturaRemota = servidor
+            ? cargarTexturaConFallback("Snakeimg2.png", 70, 160, 255)
+            : cargarTexturaConFallback("Snakeimg.png", 40, 220, 40);
+        texturaPiedra = cargarTexturaConFallback("piedra.png", 120, 120, 120);
+        texturaGameOver = cargarTexturaConFallback("gameover.png", 180, 30, 30);
+        texturaWinner = cargarTexturaConFallback("winner.png", 30, 180, 60);
+        texturaFrutaManzana = cargarTexturaConFallback("Frutaimg.png", 220, 50, 50);
+        texturaFrutaBanana = cargarTexturaConFallback("banana.png", 255, 225, 60);
+        texturaFrutaPera = cargarTexturaConFallback("pera.png", 120, 220, 90);
 
         font = new BitmapFont();
         font.getData().setScale(2f);
         font.setColor(Color.ORANGE);
-        texturaRemota = crearTexturaColor(70, 160, 255);
-        texturaFruta = crearTexturaColor(255, 90, 90);
+
+        configurarDificultadPiedras();
 
         if (servidor) {
             regenerarFrutaServidor();
             enviarScore();
+            enviarPiedras();
         }
 
+        reinicioSolicitado = false;
+        rivalListoParaReiniciar = false;
         iniciarReceptor();
     }
 
+    private void configurarDificultadPiedras() {
+        switch (dificultadPartida) {
+            case FACIL:
+                intervaloPiedraPuntuacion = 40;
+                maxPiedras = 3;
+                break;
+            case DIFICIL:
+                intervaloPiedraPuntuacion = 20;
+                maxPiedras = 7;
+                break;
+            case NORMAL:
+            default:
+                intervaloPiedraPuntuacion = 30;
+                maxPiedras = 5;
+                break;
+        }
+        siguientePiedraPuntuacion = intervaloPiedraPuntuacion;
+    }
+
     private void posicionarSnakeInicial() {
-        if (snakeLocal == null || snakeLocal.getCuerpo().isEmpty()) return;
+        if (snakeLocal == null || snakeLocal.getCuerpo().isEmpty()) {
+            return;
+        }
         float y = Gdx.graphics.getHeight() / 2f;
         float x = servidor ? Gdx.graphics.getWidth() * 0.25f : Gdx.graphics.getWidth() * 0.75f;
         snakeLocal.getCabeza().set(x, y);
@@ -90,15 +148,6 @@ public class OnlineJuegoScreen implements Screen {
         return fallback;
     }
 
-    private Texture crearTexturaColor(int r, int g, int b) {
-        Pixmap pixmap = new Pixmap(1, 1, Pixmap.Format.RGB888);
-        pixmap.setColor(r / 255f, g / 255f, b / 255f, 1f);
-        pixmap.fill();
-        Texture tex = new Texture(pixmap);
-        pixmap.dispose();
-        return tex;
-    }
-
     private void iniciarReceptor() {
         corriendo = true;
         Thread t = new Thread(() -> {
@@ -108,12 +157,14 @@ public class OnlineJuegoScreen implements Screen {
                     if (linea == null) {
                         estadoConexion = "Conexión cerrada";
                         juegoTerminado = true;
+                        corriendo = false;
                         break;
                     }
                     procesarMensaje(linea);
                 } catch (IOException e) {
                     estadoConexion = "Error de red";
                     juegoTerminado = true;
+                    corriendo = false;
                     break;
                 }
             }
@@ -123,10 +174,6 @@ public class OnlineJuegoScreen implements Screen {
     }
 
     private void procesarMensaje(String msg) {
-        if (msg.startsWith("DIR:")) {
-            return;
-        }
-
         if (msg.startsWith("STATE:")) {
             String data = msg.substring(6);
             List<Vector2> nuevo = new ArrayList<>();
@@ -151,13 +198,18 @@ public class OnlineJuegoScreen implements Screen {
 
         if (msg.startsWith("FRUIT:")) {
             String data = msg.substring(6);
-            String[] parts = data.split(":");
-            if (parts.length == 2) {
+            String[] parts = data.split(":", 3);
+            if (parts.length == 3) {
                 try {
                     frutaIdActual = Integer.parseInt(parts[0]);
                 } catch (NumberFormatException ignored) {
                 }
-                data = parts[1];
+                try {
+                    frutaTipoActual = Frutas.TipoFruta.valueOf(parts[1]);
+                } catch (IllegalArgumentException ignored) {
+                    frutaTipoActual = Frutas.TipoFruta.MANZANA;
+                }
+                data = parts[2];
             }
             String[] xy = data.split(",");
             if (xy.length == 2) {
@@ -165,6 +217,28 @@ public class OnlineJuegoScreen implements Screen {
                     frutaPos.set(Float.parseFloat(xy[0]), Float.parseFloat(xy[1]));
                 } catch (NumberFormatException ignored) {
                 }
+            }
+            return;
+        }
+
+        if (msg.startsWith("STONES:")) {
+            String data = msg.substring(7);
+            List<Vector2> nuevas = new ArrayList<>();
+            if (!data.isEmpty()) {
+                String[] stones = data.split(";");
+                for (String stone : stones) {
+                    String[] xy = stone.split(",");
+                    if (xy.length == 2) {
+                        try {
+                            nuevas.add(new Vector2(Float.parseFloat(xy[0]), Float.parseFloat(xy[1])));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+            }
+            synchronized (piedrasOnline) {
+                piedrasOnline.clear();
+                piedrasOnline.addAll(nuevas);
             }
             return;
         }
@@ -182,8 +256,25 @@ public class OnlineJuegoScreen implements Screen {
             return;
         }
 
+        if (msg.startsWith("RESTART_REQ:")) {
+            if (servidor && juegoTerminado) {
+                rivalListoParaReiniciar = true;
+                if (reinicioSolicitado) {
+                    Gdx.app.postRunnable(this::reiniciarPartidaOnline);
+                    session.enviar("RESTART");
+                } else {
+                    estadoConexion = "El jugador 2 está listo. Presioná ESPACIO para reiniciar";
+                }
+            }
+            return;
+        }
+
+        if (msg.equals("RESTART")) {
+            Gdx.app.postRunnable(this::reiniciarPartidaOnline);
+            return;
+        }
+
         if (msg.startsWith("END:")) {
-            // END:<GANADOR>:<MOTIVO>:<serverScore>:<clientScore>
             String[] values = msg.split(":", 5);
             if (values.length >= 5) {
                 try {
@@ -195,17 +286,12 @@ public class OnlineJuegoScreen implements Screen {
                 String motivo = values[2];
                 if ("EMPATE".equals(ganador)) {
                     estadoConexion = "Empate - " + motivo;
+                    localGano = false;
                 } else {
-                    boolean gane = (servidor && "SERVIDOR".equals(ganador)) || (!servidor && "CLIENTE".equals(ganador));
-                    estadoConexion = (gane ? "Ganaste" : "Perdiste") + " - " + motivo;
+                    localGano = (servidor && "SERVIDOR".equals(ganador)) || (!servidor && "CLIENTE".equals(ganador));
+                    estadoConexion = (localGano ? "Ganaste" : "Perdiste") + " - " + motivo;
                 }
             }
-            juegoTerminado = true;
-            return;
-        }
-
-        if (msg.startsWith("LOSE")) {
-            estadoConexion = "Ganaste la partida";
             juegoTerminado = true;
         }
     }
@@ -218,7 +304,11 @@ public class OnlineJuegoScreen implements Screen {
         if (!juegoTerminado) {
             manejarInput();
             snakeLocal.actualizar(delta);
-            enviarEstadoLocal();
+            acumuladorEnvioEstado += delta;
+            if (acumuladorEnvioEstado >= INTERVALO_ENVIO_ESTADO) {
+                enviarEstadoLocal();
+                acumuladorEnvioEstado -= INTERVALO_ENVIO_ESTADO;
+            }
             if (servidor) {
                 actualizarFrutaServidor();
                 evaluarFinPartidaServidor();
@@ -231,9 +321,8 @@ public class OnlineJuegoScreen implements Screen {
         if (fondoJuego != null) {
             game.batch.draw(fondoJuego, 0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         }
-        if (texturaFruta != null) {
-            game.batch.draw(texturaFruta, frutaPos.x, frutaPos.y, TAMANIO, TAMANIO);
-        }
+        dibujarPiedras(game.batch);
+        dibujarFruta(game.batch);
         snakeLocal.dibujar(game.batch);
         dibujarRemoto(game.batch);
 
@@ -244,53 +333,169 @@ public class OnlineJuegoScreen implements Screen {
         font.draw(game.batch, "Online 2P - " + rol + " | " + dificultadPartida.name(), 20, Gdx.graphics.getHeight() - 20);
         font.draw(game.batch, "Mi puntaje: " + miPuntaje + " | Rival: " + puntajeRival, 20, Gdx.graphics.getHeight() - 55);
         font.draw(game.batch, "Mueve: WASD/Flechas | ESC: menu", 20, Gdx.graphics.getHeight() - 90);
-        font.draw(game.batch, estadoConexion, 20, Gdx.graphics.getHeight() - 125);
+
         if (juegoTerminado) {
-            font.draw(game.batch, "Fin de partida - ESPACIO para reintentar", 20, Gdx.graphics.getHeight() - 160);
+            int screenW = Gdx.graphics.getWidth();
+            int screenH = Gdx.graphics.getHeight();
+            float imgW = screenW * 0.6f;
+            float imgH = screenH * 0.35f;
+            float imgX = (screenW - imgW) / 2f;
+            float imgY = (screenH - imgH) / 2f + 60f;
+
+            Texture imagenFin = localGano ? texturaWinner : texturaGameOver;
+            if (imagenFin != null) {
+                game.batch.draw(imagenFin, imgX, imgY, imgW, imgH);
+            }
+
+            font.draw(game.batch, estadoConexion, 20, imgY - 10f);
+            font.draw(game.batch, "ESPACIO: volver a jugar  |  ESC: salir al menu", 20, imgY - 50f);
         }
+
         game.batch.end();
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             salirAlMenu();
         }
         if (juegoTerminado && Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            game.mostrarMenuOnline();
+            manejarReinicioConEspacio();
+        }
+    }
+
+    private void dibujarFruta(SpriteBatch batch) {
+        Texture fruta = texturaFrutaManzana;
+        if (frutaTipoActual == Frutas.TipoFruta.BANANA) {
+            fruta = texturaFrutaBanana != null ? texturaFrutaBanana : texturaFrutaManzana;
+        } else if (frutaTipoActual == Frutas.TipoFruta.PERA) {
+            fruta = texturaFrutaPera != null ? texturaFrutaPera : texturaFrutaManzana;
+        }
+        float tam = frutaTipoActual == Frutas.TipoFruta.PERA ? TAMANIO * 1.2f : TAMANIO;
+        batch.draw(fruta, frutaPos.x, frutaPos.y, tam, tam);
+    }
+
+    private void dibujarPiedras(SpriteBatch batch) {
+        synchronized (piedrasOnline) {
+            for (Vector2 piedraPos : piedrasOnline) {
+                batch.draw(texturaPiedra, piedraPos.x, piedraPos.y, TAMANIO, TAMANIO);
+            }
         }
     }
 
     private void predecirComidaCliente() {
-        if (frutaIdActual == ultimaFrutaComidaPredicha) return;
-        Rectangle frutaRect = new Rectangle(frutaPos.x, frutaPos.y, TAMANIO, TAMANIO);
-        Rectangle cabezaLocal = new Rectangle(snakeLocal.getCabeza().x, snakeLocal.getCabeza().y, TAMANIO, TAMANIO);
+        if (frutaIdActual == ultimaFrutaComidaPredicha) {
+            return;
+        }
+        Rectangle frutaRect = rectFrutaActual();
+        Rectangle cabezaLocal = crearHitboxSnake(snakeLocal.getCabeza());
         if (cabezaLocal.overlaps(frutaRect)) {
             snakeLocal.comer();
             ultimaFrutaComidaPredicha = frutaIdActual;
         }
     }
 
-    private void actualizarFrutaServidor() {
-        Rectangle frutaRect = new Rectangle(frutaPos.x, frutaPos.y, TAMANIO, TAMANIO);
+    private Rectangle rectFrutaActual() {
+        float tam = frutaTipoActual == Frutas.TipoFruta.PERA ? TAMANIO * 1.2f : TAMANIO;
+        float inset = Math.min(HITBOX_INSET_FRUTA, tam * 0.25f);
+        return new Rectangle(frutaPos.x + inset, frutaPos.y + inset, tam - inset * 2f, tam - inset * 2f);
+    }
 
-        Rectangle cabezaLocal = new Rectangle(snakeLocal.getCabeza().x, snakeLocal.getCabeza().y, TAMANIO, TAMANIO);
+    private void actualizarFrutaServidor() {
+        Rectangle frutaRect = rectFrutaActual();
+
+        Rectangle cabezaLocal = crearHitboxSnake(snakeLocal.getCabeza());
         if (cabezaLocal.overlaps(frutaRect)) {
             snakeLocal.comer();
-            puntajeServidor += puntosPorFruta();
+            puntajeServidor += puntosPorFruta(frutaTipoActual);
             enviarScore();
             regenerarFrutaServidor();
+            actualizarPiedrasServidor();
             return;
         }
 
         synchronized (cuerpoRemoto) {
             if (!cuerpoRemoto.isEmpty()) {
                 Vector2 cabezaRemota = cuerpoRemoto.get(0);
-                Rectangle cabezaRemotaRect = new Rectangle(cabezaRemota.x, cabezaRemota.y, TAMANIO, TAMANIO);
+                Rectangle cabezaRemotaRect = crearHitboxSnake(cabezaRemota);
                 if (cabezaRemotaRect.overlaps(frutaRect)) {
-                    puntajeCliente += puntosPorFruta();
+                    puntajeCliente += puntosPorFruta(frutaTipoActual);
                     enviarScore();
                     regenerarFrutaServidor();
+                    actualizarPiedrasServidor();
                 }
             }
         }
+    }
+
+    private void actualizarPiedrasServidor() {
+        if (!servidor) {
+            return;
+        }
+        int totalPuntaje = puntajeServidor + puntajeCliente;
+        while (piedrasOnline.size() < maxPiedras && totalPuntaje >= siguientePiedraPuntuacion) {
+            Vector2 nueva = generarPosicionPiedraLibre();
+            if (nueva == null) {
+                break;
+            }
+            piedrasOnline.add(nueva);
+            siguientePiedraPuntuacion += intervaloPiedraPuntuacion;
+        }
+        enviarPiedras();
+    }
+
+    private Vector2 generarPosicionPiedraLibre() {
+        int columnas = Math.max(1, (int) (Gdx.graphics.getWidth() / TAMANIO));
+        int filas = Math.max(1, (int) (Gdx.graphics.getHeight() / TAMANIO));
+
+        for (int intento = 0; intento < 120; intento++) {
+            float x = MathUtils.random(0, columnas - 1) * TAMANIO;
+            float y = MathUtils.random(0, filas - 1) * TAMANIO;
+            Rectangle posible = new Rectangle(x, y, TAMANIO, TAMANIO);
+
+            if (posible.overlaps(rectFrutaActual())) {
+                continue;
+            }
+            if (intersectaConSnake(posible, snakeLocal.getCuerpo(), 0)) {
+                continue;
+            }
+            synchronized (cuerpoRemoto) {
+                if (intersectaConSnake(posible, cuerpoRemoto, 0)) {
+                    continue;
+                }
+            }
+            synchronized (piedrasOnline) {
+                if (intersectaConPiedras(posible)) {
+                    continue;
+                }
+            }
+            return new Vector2(x, y);
+        }
+        return null;
+    }
+
+    private boolean intersectaConPiedras(Rectangle rect) {
+        for (Vector2 pos : piedrasOnline) {
+            Rectangle piedraRect = new Rectangle(pos.x, pos.y, TAMANIO, TAMANIO);
+            if (rect.overlaps(piedraRect)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void enviarPiedras() {
+        if (!servidor) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder("STONES:");
+        synchronized (piedrasOnline) {
+            for (int i = 0; i < piedrasOnline.size(); i++) {
+                Vector2 p = piedrasOnline.get(i);
+                if (i > 0) {
+                    sb.append(';');
+                }
+                sb.append(p.x).append(',').append(p.y);
+            }
+        }
+        session.enviar(sb.toString());
     }
 
     private void regenerarFrutaServidor() {
@@ -300,7 +505,8 @@ public class OnlineJuegoScreen implements Screen {
         for (int intento = 0; intento < 120; intento++) {
             float x = MathUtils.random(0, columnas - 1) * TAMANIO;
             float y = MathUtils.random(0, filas - 1) * TAMANIO;
-            Rectangle posible = new Rectangle(x, y, TAMANIO, TAMANIO);
+            Frutas.TipoFruta tipo = sortearTipoFruta();
+            Rectangle posible = rectFruta(tipo, x, y);
             if (intersectaConSnake(posible, snakeLocal.getCuerpo(), 0)) {
                 continue;
             }
@@ -309,15 +515,47 @@ public class OnlineJuegoScreen implements Screen {
                     continue;
                 }
             }
+            synchronized (piedrasOnline) {
+                if (intersectaConPiedras(posible)) {
+                    continue;
+                }
+            }
             frutaPos.set(x, y);
+            frutaTipoActual = tipo;
             frutaIdActual++;
-            session.enviar("FRUIT:" + frutaIdActual + ":" + frutaPos.x + "," + frutaPos.y);
+            session.enviar("FRUIT:" + frutaIdActual + ":" + frutaTipoActual.name() + ":" + frutaPos.x + "," + frutaPos.y);
             return;
         }
 
         frutaPos.set(TAMANIO * 3f, TAMANIO * 3f);
+        frutaTipoActual = Frutas.TipoFruta.MANZANA;
         frutaIdActual++;
-        session.enviar("FRUIT:" + frutaIdActual + ":" + frutaPos.x + "," + frutaPos.y);
+        session.enviar("FRUIT:" + frutaIdActual + ":" + frutaTipoActual.name() + ":" + frutaPos.x + "," + frutaPos.y);
+    }
+
+    private Frutas.TipoFruta sortearTipoFruta() {
+        float r = MathUtils.random();
+        switch (dificultadPartida) {
+            case FACIL:
+                if (r < 0.25f) return Frutas.TipoFruta.PERA;
+                if (r < 0.55f) return Frutas.TipoFruta.BANANA;
+                return Frutas.TipoFruta.MANZANA;
+            case DIFICIL:
+                if (r < 0.20f) return Frutas.TipoFruta.PERA;
+                if (r < 0.45f) return Frutas.TipoFruta.BANANA;
+                return Frutas.TipoFruta.MANZANA;
+            case NORMAL:
+            default:
+                if (r < 0.15f) return Frutas.TipoFruta.PERA;
+                if (r < 0.35f) return Frutas.TipoFruta.BANANA;
+                return Frutas.TipoFruta.MANZANA;
+        }
+    }
+
+    private Rectangle rectFruta(Frutas.TipoFruta tipo, float x, float y) {
+        float tam = tipo == Frutas.TipoFruta.PERA ? TAMANIO * 1.2f : TAMANIO;
+        float inset = Math.min(HITBOX_INSET_FRUTA, tam * 0.25f);
+        return new Rectangle(x + inset, y + inset, tam - inset * 2f, tam - inset * 2f);
     }
 
     private boolean intersectaConSnake(Rectangle rect, List<Vector2> cuerpo, int startIndex) {
@@ -335,13 +573,13 @@ public class OnlineJuegoScreen implements Screen {
         session.enviar("SCORE:" + puntajeServidor + "," + puntajeCliente);
     }
 
-    private int puntosPorFruta() {
-        switch (dificultadPartida) {
-            case FACIL:
-                return 8;
-            case DIFICIL:
-                return 14;
-            case NORMAL:
+    private int puntosPorFruta(Frutas.TipoFruta tipo) {
+        switch (tipo) {
+            case BANANA:
+                return 15;
+            case PERA:
+                return 20;
+            case MANZANA:
             default:
                 return 10;
         }
@@ -350,19 +588,15 @@ public class OnlineJuegoScreen implements Screen {
     private void manejarInput() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) {
             snakeLocal.cambiarDireccion(Direccion.ARRIBA);
-            session.enviar("DIR:UP");
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) {
             snakeLocal.cambiarDireccion(Direccion.ABAJO);
-            session.enviar("DIR:DOWN");
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.A)) {
             snakeLocal.cambiarDireccion(Direccion.IZQUIERDA);
-            session.enviar("DIR:LEFT");
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT) || Gdx.input.isKeyJustPressed(Input.Keys.D)) {
             snakeLocal.cambiarDireccion(Direccion.DERECHA);
-            session.enviar("DIR:RIGHT");
         }
     }
 
@@ -370,7 +604,9 @@ public class OnlineJuegoScreen implements Screen {
         StringBuilder sb = new StringBuilder("STATE:");
         boolean first = true;
         for (Vector2 p : snakeLocal.getCuerpo()) {
-            if (!first) sb.append(';');
+            if (!first) {
+                sb.append(';');
+            }
             first = false;
             sb.append(p.x).append(',').append(p.y);
         }
@@ -378,20 +614,24 @@ public class OnlineJuegoScreen implements Screen {
     }
 
     private void evaluarFinPartidaServidor() {
-        boolean servidorMuere = tocaBorde(snakeLocal.getCabeza()) || colisionConPropioCuerpo(snakeLocal.getCuerpo());
+        boolean servidorMuere = tocaBorde(snakeLocal.getCabeza())
+            || colisionConPropioCuerpo(snakeLocal.getCuerpo())
+            || colisionConPiedras(snakeLocal.getCabeza());
 
         boolean clienteMuere = false;
         Vector2 cabezaCliente = null;
         synchronized (cuerpoRemoto) {
             if (!cuerpoRemoto.isEmpty()) {
                 cabezaCliente = cuerpoRemoto.get(0);
-                clienteMuere = tocaBorde(cabezaCliente) || colisionConPropioCuerpo(cuerpoRemoto);
+                clienteMuere = tocaBorde(cabezaCliente)
+                    || colisionConPropioCuerpo(cuerpoRemoto)
+                    || colisionConPiedras(cabezaCliente);
             }
         }
 
         if (cabezaCliente != null) {
-            Rectangle headServidor = new Rectangle(snakeLocal.getCabeza().x, snakeLocal.getCabeza().y, TAMANIO, TAMANIO);
-            Rectangle headCliente = new Rectangle(cabezaCliente.x, cabezaCliente.y, TAMANIO, TAMANIO);
+            Rectangle headServidor = crearHitboxSnake(snakeLocal.getCabeza());
+            Rectangle headCliente = crearHitboxSnake(cabezaCliente);
 
             if (headServidor.overlaps(headCliente)) {
                 finalizarPorPuntaje("Choque de cabezas");
@@ -399,15 +639,15 @@ public class OnlineJuegoScreen implements Screen {
             }
 
             synchronized (cuerpoRemoto) {
-                Rectangle bodyServidorRect = new Rectangle(snakeLocal.getCabeza().x, snakeLocal.getCabeza().y, TAMANIO, TAMANIO);
+                Rectangle bodyServidorRect = crearHitboxSnake(snakeLocal.getCabeza());
                 if (intersectaConSnake(bodyServidorRect, cuerpoRemoto, 1)) {
-                    finalizarConGanador("CLIENTE", "El cliente te comió");
+                    finalizarConGanador("CLIENTE", "Colisión de serpientes");
                     return;
                 }
 
-                Rectangle bodyClienteRect = new Rectangle(cabezaCliente.x, cabezaCliente.y, TAMANIO, TAMANIO);
+                Rectangle bodyClienteRect = crearHitboxSnake(cabezaCliente);
                 if (intersectaConSnake(bodyClienteRect, snakeLocal.getCuerpo(), 1)) {
-                    finalizarConGanador("SERVIDOR", "Comiste al cliente");
+                    finalizarConGanador("SERVIDOR", "Colisión de serpientes");
                     return;
                 }
             }
@@ -426,17 +666,35 @@ public class OnlineJuegoScreen implements Screen {
         }
     }
 
+    private boolean colisionConPiedras(Vector2 cabeza) {
+        Rectangle headRect = crearHitboxSnake(cabeza);
+        synchronized (piedrasOnline) {
+            for (Vector2 piedra : piedrasOnline) {
+                Rectangle piedraRect = crearHitboxPiedra(piedra);
+                if (headRect.overlaps(piedraRect)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private boolean tocaBorde(Vector2 cabeza) {
-        return cabeza.x < 0 || cabeza.y < 0 || cabeza.x > Gdx.graphics.getWidth() - TAMANIO || cabeza.y > Gdx.graphics.getHeight() - TAMANIO;
+        return cabeza.x < 0
+            || cabeza.y < 0
+            || cabeza.x > Gdx.graphics.getWidth() - TAMANIO
+            || cabeza.y > Gdx.graphics.getHeight() - TAMANIO;
     }
 
     private boolean colisionConPropioCuerpo(List<Vector2> cuerpo) {
-        if (cuerpo.size() < 8) return false;
+        if (cuerpo.size() < 8) {
+            return false;
+        }
         Vector2 cabeza = cuerpo.get(0);
-        Rectangle head = new Rectangle(cabeza.x, cabeza.y, TAMANIO, TAMANIO);
+        Rectangle head = crearHitboxSnake(cabeza);
         for (int i = 5; i < cuerpo.size(); i++) {
             Vector2 seg = cuerpo.get(i);
-            Rectangle other = new Rectangle(seg.x, seg.y, TAMANIO, TAMANIO);
+            Rectangle other = crearHitboxSnake(seg);
             if (head.overlaps(other)) {
                 return true;
             }
@@ -455,14 +713,17 @@ public class OnlineJuegoScreen implements Screen {
     }
 
     private void finalizarConGanador(String ganador, String motivo) {
-        if (juegoTerminado) return;
+        if (juegoTerminado) {
+            return;
+        }
         juegoTerminado = true;
 
         if ("EMPATE".equals(ganador)) {
             estadoConexion = "Empate - " + motivo;
+            localGano = false;
         } else {
-            boolean gane = (servidor && "SERVIDOR".equals(ganador)) || (!servidor && "CLIENTE".equals(ganador));
-            estadoConexion = (gane ? "Ganaste" : "Perdiste") + " - " + motivo;
+            localGano = (servidor && "SERVIDOR".equals(ganador)) || (!servidor && "CLIENTE".equals(ganador));
+            estadoConexion = (localGano ? "Ganaste" : "Perdiste") + " - " + motivo;
         }
 
         session.enviar("END:" + ganador + ":" + motivo + ":" + puntajeServidor + ":" + puntajeCliente);
@@ -476,20 +737,98 @@ public class OnlineJuegoScreen implements Screen {
         }
     }
 
+    private Rectangle crearHitboxSnake(Vector2 posicion) {
+        float inset = Math.min(HITBOX_INSET_SNAKE, TAMANIO * 0.25f);
+        return new Rectangle(posicion.x + inset, posicion.y + inset, TAMANIO - inset * 2f, TAMANIO - inset * 2f);
+    }
+
+    private Rectangle crearHitboxPiedra(Vector2 posicion) {
+        float inset = Math.min(HITBOX_INSET_PIEDRA, TAMANIO * 0.25f);
+        return new Rectangle(posicion.x + inset, posicion.y + inset, TAMANIO - inset * 2f, TAMANIO - inset * 2f);
+    }
+
+    private void manejarReinicioConEspacio() {
+        if (reinicioSolicitado) {
+            return;
+        }
+        reinicioSolicitado = true;
+
+        if (servidor) {
+            if (rivalListoParaReiniciar) {
+                reiniciarPartidaOnline();
+                session.enviar("RESTART");
+            } else {
+                estadoConexion = "Esperando al jugador 2 para reiniciar";
+            }
+            return;
+        }
+
+        estadoConexion = "Esperando al jugador 1 para reiniciar";
+        session.enviar("RESTART_REQ:CLIENTE");
+    }
+
+    private void reiniciarPartidaOnline() {
+        float velocidad = VELOCIDAD_BASE * dificultadPartida.getVelocidad();
+        if (snakeLocal != null) {
+            snakeLocal.dispose();
+        }
+        String texturaLocal = servidor ? "Snakeimg.png" : "Snakeimg2.png";
+        snakeLocal = new Snake(velocidad, TAMANIO, texturaLocal);
+        posicionarSnakeInicial();
+
+        synchronized (cuerpoRemoto) {
+            cuerpoRemoto.clear();
+        }
+        if (servidor) {
+            puntajeServidor = 0;
+            puntajeCliente = 0;
+            piedrasOnline.clear();
+            siguientePiedraPuntuacion = intervaloPiedraPuntuacion;
+            regenerarFrutaServidor();
+            enviarPiedras();
+            enviarScore();
+        }
+
+        acumuladorEnvioEstado = 0f;
+        juegoTerminado = false;
+        localGano = false;
+        estadoConexion = "Conectado";
+        reinicioSolicitado = false;
+        rivalListoParaReiniciar = false;
+    }
+
     private void salirAlMenu() {
         corriendo = false;
-        session.cerrar();
+        cerrarSesionAsync();
         game.mostrarMenu();
     }
 
-    @Override
-    public void resize(int width, int height) {}
+    private void cerrarSesionAsync() {
+        if (cierreSesionSolicitado) {
+            return;
+        }
+        cierreSesionSolicitado = true;
+        Thread cierre = new Thread(() -> {
+            try {
+                session.cerrar();
+            } catch (Exception ignored) {
+            }
+        }, "online-session-close-thread");
+        cierre.setDaemon(true);
+        cierre.start();
+    }
 
     @Override
-    public void pause() {}
+    public void resize(int width, int height) {
+    }
 
     @Override
-    public void resume() {}
+    public void pause() {
+    }
+
+    @Override
+    public void resume() {
+    }
 
     @Override
     public void hide() {
@@ -501,9 +840,11 @@ public class OnlineJuegoScreen implements Screen {
         corriendo = false;
         if (snakeLocal != null) {
             snakeLocal.dispose();
+            snakeLocal = null;
         }
         if (font != null) {
             font.dispose();
+            font = null;
         }
         if (fondoJuego != null) {
             fondoJuego.dispose();
@@ -511,10 +852,32 @@ public class OnlineJuegoScreen implements Screen {
         }
         if (texturaRemota != null) {
             texturaRemota.dispose();
+            texturaRemota = null;
         }
-        if (texturaFruta != null) {
-            texturaFruta.dispose();
+        if (texturaPiedra != null) {
+            texturaPiedra.dispose();
+            texturaPiedra = null;
         }
-        session.cerrar();
+        if (texturaGameOver != null) {
+            texturaGameOver.dispose();
+            texturaGameOver = null;
+        }
+        if (texturaWinner != null) {
+            texturaWinner.dispose();
+            texturaWinner = null;
+        }
+        if (texturaFrutaManzana != null) {
+            texturaFrutaManzana.dispose();
+            texturaFrutaManzana = null;
+        }
+        if (texturaFrutaBanana != null) {
+            texturaFrutaBanana.dispose();
+            texturaFrutaBanana = null;
+        }
+        if (texturaFrutaPera != null) {
+            texturaFrutaPera.dispose();
+            texturaFrutaPera = null;
+        }
+        cerrarSesionAsync();
     }
 }

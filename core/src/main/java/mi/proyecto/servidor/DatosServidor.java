@@ -1,7 +1,7 @@
 package mi.proyecto.servidor;
 
 import mi.proyecto.Dificultad;
-
+//Guarda los datos del puerto y la dificultad
 public class DatosServidor {
 
     private final int puerto;

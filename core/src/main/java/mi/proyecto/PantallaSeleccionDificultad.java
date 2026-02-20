@@ -19,6 +19,11 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
+
+//Pantalla donde el jugador elige la dificultad antes de empezar.
+//Muestra tres botones (Fácil, Normal, Difícil) y al hacer click guarda la dificultad elegida e inicia el juego.
+
+
 public class PantallaSeleccionDificultad implements Screen {
 
     private final MiJuegoPrincipal juego;

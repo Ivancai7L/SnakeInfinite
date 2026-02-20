@@ -17,12 +17,12 @@ public class Frutas {
     }
 
     private static final float TAMANIO_BASE = 25f;
-    private static final float ESCALA_PERA = 1.15f;
+    private static final float ESCALA_PERA = 1.2f;
 
     private Texture texturaManzana;
     private Texture texturaBanana;
     private Texture texturaPera;
-    private Vector2 posicion;
+    private final Vector2 posicion;
     private TipoFruta tipo;
     private float probBanana;
     private float probPera;
@@ -33,8 +33,8 @@ public class Frutas {
         texturaPera = cargarTexturaConFallback("pera.png", 120, 220, 90);
         posicion = new Vector2();
         tipo = TipoFruta.MANZANA;
-        probBanana = 0.10f;
-        probPera = 0.08f;
+        probBanana = 0.15f;
+        probPera = 0.10f;
         generarNuevaPosicion();
     }
 
@@ -45,6 +45,8 @@ public class Frutas {
     }
 
     public void generarNuevaPosicion() {
+        sortearTipo();
+
         float tam = obtenerTamanoActual();
         int columnas = Math.max(1, (int) (Gdx.graphics.getWidth() / TAMANIO_BASE));
         int filas = Math.max(1, (int) (Gdx.graphics.getHeight() / TAMANIO_BASE));
@@ -55,8 +57,6 @@ public class Frutas {
         x = Math.min(x, Gdx.graphics.getWidth() - tam);
         y = Math.min(y, Gdx.graphics.getHeight() - tam);
         posicion.set(x, y);
-
-        sortearTipo();
     }
 
     private void sortearTipo() {
@@ -90,17 +90,17 @@ public class Frutas {
 
         switch (dificultad) {
             case FACIL:
-                probBanana = Math.max(probBanana, 0.12f);
-                probPera = Math.max(probPera, 0.10f);
+                probBanana = 0.30f;
+                probPera = 0.25f;
                 break;
             case DIFICIL:
-                probBanana = Math.max(probBanana, 0.18f);
-                probPera = Math.max(probPera, 0.14f);
+                probBanana = 0.25f;
+                probPera = 0.20f;
                 break;
             case NORMAL:
             default:
-                probBanana = Math.max(probBanana, 0.14f);
-                probPera = Math.max(probPera, 0.11f);
+                probBanana = 0.20f;
+                probPera = 0.15f;
                 break;
         }
     }

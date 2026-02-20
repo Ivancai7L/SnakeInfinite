@@ -1,11 +1,19 @@
 package mi.proyecto.cliente;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import mi.proyecto.Dificultad;
 import mi.proyecto.OnlineSession;
 
+
+//Thread que corre en segundo plano y se conecta al servidor.
+//Hace el handshake, recibe el rol y la dificultad, y cuando todo está bien avisa via Listener para arrancar la partida.
+
 public class HiloCliente extends Thread {
+
+    private static final int CONNECT_TIMEOUT_MS = 4000;
+    private static final int HANDSHAKE_TIMEOUT_MS = 5000;
 
     public interface Listener {
         void onEstado(String estado);
@@ -30,7 +38,11 @@ public class HiloCliente extends Thread {
         listener.onEstado("Conectando a " + ip + ":" + puerto + "...");
 
         try {
-            Socket socket = new Socket(ip, puerto);
+            Socket socket = new Socket();
+            socket.connect(new InetSocketAddress(ip, puerto), CONNECT_TIMEOUT_MS);
+            socket.setTcpNoDelay(true);
+            socket.setKeepAlive(true);
+            socket.setSoTimeout(HANDSHAKE_TIMEOUT_MS);
             OnlineSession session = new OnlineSession(socket);
             session.enviar("STATUS:CLIENTE_CONECTADO");
 
@@ -52,6 +64,7 @@ public class HiloCliente extends Thread {
                 }
             }
 
+            socket.setSoTimeout(0);
             listener.onEstado("Conectado. Dificultad recibida: " + dificultadRemota.name());
             listener.onConectado(session, dificultadRemota);
         } catch (IOException e) {

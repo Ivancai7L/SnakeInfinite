@@ -94,7 +94,7 @@ public class JuegoScreen implements Screen {
     }
 
     @Override
-    public void render(float delta) {
+    public void render(float delta) { //limpia, actualiza y dibuja
         Gdx.gl.glClearColor(0.1f, 0.1f, 0.15f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 

@@ -17,17 +17,24 @@ import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import mi.proyecto.cliente.HiloCliente;
 import mi.proyecto.servidor.DatosServidor;
 import mi.proyecto.servidor.HiloServidor;
 
+//Permite crear servidor, conectarse como cliente(local o por búsqueda automática), elegir dificultad y manejar el estado de conexión.
 
 public class OnlineMenuScreen implements Screen {
+
+    private static final int PUERTO_SERVIDOR = 5050;
+    private static final String IP_LOCALHOST = "127.0.0.1";
+    private static final int PUERTO_DESCUBRIMIENTO = 5051;
+    private static final String BEACON_PREFIJO = "SNAKE_SERVER:";
 
     private final MiJuegoPrincipal game;
     private Stage stage;
@@ -36,8 +43,10 @@ public class OnlineMenuScreen implements Screen {
     private Label estado;
     private volatile boolean esperandoConexion;
     private volatile boolean conectandoCliente;
+    private volatile boolean disposed;
     private Dificultad dificultadOnline = Dificultad.NORMAL;
     private final List<Texture> texturasUI = new ArrayList<>();
+    private volatile boolean emitiendoBeacon;
 
     public OnlineMenuScreen(MiJuegoPrincipal game) {
         this.game = game;
@@ -45,6 +54,7 @@ public class OnlineMenuScreen implements Screen {
 
     @Override
     public void show() {
+        disposed = false;
         stage = new Stage(new ScreenViewport());
         Gdx.input.setInputProcessor(stage);
         fondo = cargarTexturaConFallback("Fondosnake.jpg", 20, 20, 20);
@@ -55,7 +65,7 @@ public class OnlineMenuScreen implements Screen {
 
         TextButton btnHost = crearBoton("CREAR SERVIDOR", 50, 145, 50);
         TextButton btnJoinLocal = crearBoton("CLIENTE LOCAL (127.0.0.1)", 50, 95, 190);
-        TextButton btnJoin = crearBoton("ENTRAR COMO CLIENTE (IP)", 70, 95, 190);
+        TextButton btnJoin = crearBoton("ENTRAR COMO CLIENTE (AUTO)", 70, 95, 190);
         TextButton btnBack = crearBoton("VOLVER AL MENU", 120, 120, 120);
         TextButton btnDificultad = crearBoton(textoDificultad(), 170, 120, 40);
 
@@ -71,14 +81,14 @@ public class OnlineMenuScreen implements Screen {
         btnJoinLocal.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                conectarComoCliente("127.0.0.1");
+                conectarComoCliente(IP_LOCALHOST);
             }
         });
 
         btnJoin.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
-                pedirIpYConectar();
+                conectarClienteAutomatico();
             }
         });
 
@@ -112,7 +122,7 @@ public class OnlineMenuScreen implements Screen {
         table.row();
         table.add(new Label("2) Jugador 2: click en CLIENTE LOCAL (misma PC)", style)).padBottom(8);
         table.row();
-        table.add(new Label("3) Si están en PCs distintas: ENTRAR COMO CLIENTE (IP)", style)).padBottom(16);
+        table.add(new Label("3) Si están en PCs distintas: ENTRAR COMO CLIENTE (AUTO)", style)).padBottom(16);
 
         table.row();
         table.add(btnDificultad).width(520).height(80).pad(8);
@@ -159,43 +169,98 @@ public class OnlineMenuScreen implements Screen {
     }
 
     private void iniciarHost() {
-        if (esperandoConexion) {
+        if (esperandoConexion || conectandoCliente) {
             return;
         }
         esperandoConexion = true;
-        estado.setText("Servidor abierto en puerto 5050 (esperando cliente)...");
-        Thread t = new Thread(() -> {
-            try (ServerSocket serverSocket = new ServerSocket(5050)) {
-                Socket socket = serverSocket.accept();
-                OnlineSession session = new OnlineSession(socket);
-                session.enviar("ROLE:CLIENT");
-                session.enviar("DIFF:" + dificultadOnline.name());
-                Dificultad dificultadElegida = dificultadOnline;
-                Gdx.app.postRunnable(() -> game.iniciarJuegoOnline(session, true, dificultadElegida));
-            } catch (IOException e) {
-                Gdx.app.postRunnable(() -> estado.setText("Error host: " + e.getMessage()));
-            } finally {
-                esperandoConexion = false;
+        estado.setText("Servidor abierto en puerto " + PUERTO_SERVIDOR + " (esperando cliente)...");
+
+        iniciarBeaconServidor();
+        DatosServidor datosServidor = new DatosServidor(PUERTO_SERVIDOR, dificultadOnline);
+        HiloServidor hiloServidor = new HiloServidor(datosServidor, new HiloServidor.Listener() {
+            @Override
+            public void onEstado(String estadoActual) {
+                actualizarEstadoAsync(estadoActual);
             }
-        }, "online-host-thread");
-        t.setDaemon(true);
-        t.start();
+
+            @Override
+            public void onConectado(OnlineSession session, DatosServidor datos) {
+                Gdx.app.postRunnable(() -> {
+                    if (disposed) {
+                        session.cerrar();
+                        return;
+                    }
+                    esperandoConexion = false;
+                    detenerBeaconServidor();
+                    game.iniciarJuegoOnline(session, true, datos.getDificultad());
+                });
+            }
+
+            @Override
+            public void onError(String mensaje) {
+                Gdx.app.postRunnable(() -> {
+                    esperandoConexion = false;
+                    detenerBeaconServidor();
+                    if (disposed) {
+                        return;
+                    }
+                    estado.setText("Error host: " + mensaje);
+                });
+            }
+        });
+        hiloServidor.start();
     }
 
-    private void pedirIpYConectar() {
-        if (conectandoCliente) return;
-        estado.setText("Ingresá la IP del servidor (si es misma PC: 127.0.0.1)");
-        Gdx.input.getTextInput(new Input.TextInputListener() {
-            @Override
-            public void input(String text) {
-                conectarComoCliente(text == null || text.isEmpty() ? "127.0.0.1" : text.trim());
+    private void conectarClienteAutomatico() {
+        if (conectandoCliente || esperandoConexion) {
+            return;
+        }
+
+        conectandoCliente = true;
+        estado.setText("Buscando servidor en la red...");
+
+        Thread detector = new Thread(() -> {
+            String ipDescubierta = descubrirServidorLan();
+            Gdx.app.postRunnable(() -> {
+                if (disposed) {
+                    conectandoCliente = false;
+                    return;
+                }
+                if (ipDescubierta == null) {
+                    conectandoCliente = false;
+                    estado.setText("No se encontró servidor automáticamente. Verificá que el host esté en CREAR SERVIDOR");
+                    return;
+                }
+                estado.setText("Servidor encontrado en " + ipDescubierta + ". Conectando...");
+                conectandoCliente = false;
+                conectarComoCliente(ipDescubierta);
+            });
+        }, "online-discovery-client-thread");
+        detector.setDaemon(true);
+        detector.start();
+    }
+
+    private String descubrirServidorLan() {
+        byte[] buffer = new byte[128];
+        try (DatagramSocket socket = new DatagramSocket(PUERTO_DESCUBRIMIENTO)) {
+            socket.setSoTimeout(4500);
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            socket.receive(packet);
+
+            String msg = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+            if (!msg.startsWith(BEACON_PREFIJO)) {
+                return null;
             }
 
-            @Override
-            public void canceled() {
-                estado.setText("Conexión cancelada");
+            String puertoTexto = msg.substring(BEACON_PREFIJO.length()).trim();
+            int puerto = Integer.parseInt(puertoTexto);
+            if (puerto != PUERTO_SERVIDOR) {
+                return null;
             }
-        }, "Conectar a IP", "127.0.0.1", "");
+            return packet.getAddress().getHostAddress();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void conectarComoCliente(String ip) {
@@ -203,39 +268,79 @@ public class OnlineMenuScreen implements Screen {
             return;
         }
         conectandoCliente = true;
-        estado.setText("Conectando como cliente a " + ip + ":5050 ...");
-        Thread t = new Thread(() -> {
-            try {
-                Socket socket = new Socket(ip, 5050);
-                OnlineSession session = new OnlineSession(socket);
-                String handshake = session.recibirLinea();
-                if (!"ROLE:CLIENT".equals(handshake)) {
-                    session.cerrar();
-                    Gdx.app.postRunnable(() -> estado.setText("Conexión inválida: el host no está en modo servidor"));
-                    return;
-                }
+        estado.setText("Conectando como cliente a " + ip + ":" + PUERTO_SERVIDOR + " ...");
 
-                String diffMsg = session.recibirLinea();
-                Dificultad dificultadRemota = Dificultad.NORMAL;
-                if (diffMsg != null && diffMsg.startsWith("DIFF:")) {
-                    String nombreDiff = diffMsg.substring(5).trim();
+        HiloCliente hiloCliente = new HiloCliente(ip, PUERTO_SERVIDOR, new HiloCliente.Listener() {
+            @Override
+            public void onEstado(String estadoActual) {
+                actualizarEstadoAsync(estadoActual);
+            }
+
+            @Override
+            public void onConectado(OnlineSession session, Dificultad dificultad) {
+                Gdx.app.postRunnable(() -> {
+                    if (disposed) {
+                        session.cerrar();
+                        return;
+                    }
+                    conectandoCliente = false;
+                    game.iniciarJuegoOnline(session, false, dificultad);
+                });
+            }
+
+            @Override
+            public void onError(String mensaje) {
+                Gdx.app.postRunnable(() -> {
+                    conectandoCliente = false;
+                    if (disposed) {
+                        return;
+                    }
+                    estado.setText(mensaje);
+                });
+            }
+        });
+        hiloCliente.start();
+    }
+
+    private void iniciarBeaconServidor() {
+        emitiendoBeacon = true;
+        Thread beacon = new Thread(() -> {
+            byte[] data = (BEACON_PREFIJO + PUERTO_SERVIDOR).getBytes(StandardCharsets.UTF_8);
+            try (DatagramSocket socket = new DatagramSocket()) {
+                socket.setBroadcast(true);
+                DatagramPacket packet = new DatagramPacket(
+                    data,
+                    data.length,
+                    InetAddress.getByName("255.255.255.255"),
+                    PUERTO_DESCUBRIMIENTO
+                );
+                while (emitiendoBeacon && !disposed) {
+                    socket.send(packet);
                     try {
-                        dificultadRemota = Dificultad.valueOf(nombreDiff);
-                    } catch (IllegalArgumentException ignored) {
-                        dificultadRemota = Dificultad.NORMAL;
+                        Thread.sleep(700);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                        break;
                     }
                 }
-
-                Dificultad dificultadFinal = dificultadRemota;
-                Gdx.app.postRunnable(() -> game.iniciarJuegoOnline(session, false, dificultadFinal));
-            } catch (IOException e) {
-                Gdx.app.postRunnable(() -> estado.setText("Error conexión: " + e.getMessage()));
-            } finally {
-                conectandoCliente = false;
+            } catch (Exception ignored) {
             }
-        }, "online-join-thread");
-        t.setDaemon(true);
-        t.start();
+        }, "online-host-beacon-thread");
+        beacon.setDaemon(true);
+        beacon.start();
+    }
+
+    private void detenerBeaconServidor() {
+        emitiendoBeacon = false;
+    }
+
+    private void actualizarEstadoAsync(String mensaje) {
+        Gdx.app.postRunnable(() -> {
+            if (disposed || estado == null) {
+                return;
+            }
+            estado.setText(mensaje);
+        });
     }
 
     private String textoDificultad() {
@@ -285,10 +390,16 @@ public class OnlineMenuScreen implements Screen {
     public void resume() {}
 
     @Override
-    public void hide() {}
+    public void hide() {
+        Gdx.input.setInputProcessor(null);
+    }
 
     @Override
     public void dispose() {
+        disposed = true;
+        esperandoConexion = false;
+        conectandoCliente = false;
+        detenerBeaconServidor();
         if (stage != null) {
             stage.dispose();
         }

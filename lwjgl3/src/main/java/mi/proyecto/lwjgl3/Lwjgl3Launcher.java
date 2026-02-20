@@ -2,6 +2,7 @@ package mi.proyecto.lwjgl3;
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
+import com.badlogic.gdx.graphics.glutils.HdpiMode;
 import mi.proyecto.MiJuegoPrincipal;
 
 public class Lwjgl3Launcher {
@@ -19,6 +20,7 @@ public class Lwjgl3Launcher {
         configuration.setTitle("Snake Infinite");
 
         configuration.useVsync(true);
+        configuration.setHdpiMode(HdpiMode.Pixels);
 
         configuration.setForegroundFPS(Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate + 1);
 

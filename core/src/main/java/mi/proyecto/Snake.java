@@ -17,21 +17,30 @@ public class Snake {
     private final float tamano;
     private Texture textura;
     private int crecimientoPendiente;
+    private final float escalaDibujo;
+
+    //se dibuja como una lista de segmentos
 
     public Snake(float velocidad, float tamano) {
+        this(velocidad, tamano, "Snakeimg.png");
+    }
+
+    public Snake(float velocidad, float tamano, String rutaTextura) {
         this.velocidad = velocidad;
         this.tamano = tamano;
 
+        String ruta = (rutaTextura == null || rutaTextura.trim().isEmpty()) ? "Snakeimg.png" : rutaTextura.trim();
+        this.escalaDibujo = "Snakeimg2.png".equals(ruta) ? 1f : 1f;
         try {
-            if (Gdx.files.internal("Snakeimg.png").exists()) {
-                this.textura = new Texture("Snakeimg.png");
-                System.out.println("Textura Snakeimg.png cargada");
+            if (Gdx.files.internal(ruta).exists()) {
+                this.textura = new Texture(ruta);
+                System.out.println("Textura " + ruta + " cargada");
             } else {
                 this.textura = crearTexturaColor(0, 255, 0);
-                System.out.println("Textura Snakeimg.png no encontrada, usando textura verde generada");
+                System.out.println("Textura " + ruta + " no encontrada, usando textura verde generada");
             }
         } catch (Exception e) {
-            System.out.println("Error al cargar Snakeimg.png: " + e.getMessage());
+            System.out.println("Error al cargar " + ruta + ": " + e.getMessage());
             this.textura = crearTexturaColor(0, 255, 0);
         }
 
@@ -83,20 +92,14 @@ public class Snake {
                 break;
         }
 
-        float maxX = Gdx.graphics.getWidth() - tamano;
-        float maxY = Gdx.graphics.getHeight() - tamano;
+        float ancho = Gdx.graphics.getWidth();
+        float alto = Gdx.graphics.getHeight();
 
-        if (nueva.x < 0f) {
-            nueva.x = maxX;
-        } else if (nueva.x > maxX) {
-            nueva.x = 0f;
-        }
+        if (nueva.x < 0) nueva.x = ancho - tamano;
+        else if (nueva.x > ancho - tamano) nueva.x = 0;
 
-        if (nueva.y < 0f) {
-            nueva.y = maxY;
-        } else if (nueva.y > maxY) {
-            nueva.y = 0f;
-        }
+        if (nueva.y < 0) nueva.y = alto - tamano;
+        else if (nueva.y > alto - tamano) nueva.y = 0;
 
         cuerpo.addFirst(nueva);
         if (crecimientoPendiente > 0) {
@@ -111,8 +114,10 @@ public class Snake {
     }
 
     public void dibujar(SpriteBatch batch) {
+        float tamanoDibujo = tamano * escalaDibujo;
+        float offset = (tamanoDibujo - tamano) * 0.5f;
         for (Vector2 p : cuerpo) {
-            batch.draw(textura, p.x, p.y, tamano, tamano);
+            batch.draw(textura, p.x - offset, p.y - offset, tamanoDibujo, tamanoDibujo);
         }
     }
 

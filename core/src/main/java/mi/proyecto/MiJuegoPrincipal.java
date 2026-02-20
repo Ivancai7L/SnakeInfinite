@@ -2,77 +2,60 @@ package mi.proyecto;
 
 import com.badlogic.gdx.Game;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.utils.Logger;
+
+
+//Maneja el SpriteBatch, la música, el estado de mute/volumen y la navegación entre pantallas (menús, juego, online).
+//También centraliza el inicio de la música y la gestión del ciclo de vida general del juego.
 
 public class MiJuegoPrincipal extends Game {
 
+    private static final Logger LOGGER = new Logger(MiJuegoPrincipal.class.getSimpleName(), Logger.INFO);
+    private static final String MUSICA_RUTA = "Musicasnake.mp3";
+    private static final float VOLUMEN_MIN = 0f;
+    private static final float VOLUMEN_MAX = 1f;
+
     public SpriteBatch batch;
     public Dificultad dificultadSeleccionada;
+
     private Music musica;
     private float volumenMusica = 0.5f;
     private boolean mute;
 
     @Override
     public void create() {
-        try {
-            System.out.println("MiJuegoPrincipal: create() iniciado");
-            batch = new SpriteBatch();
-            System.out.println("MiJuegoPrincipal: SpriteBatch creado");
-            iniciarMusica();
-            mostrarMenu();
-            System.out.println("MiJuegoPrincipal: create() completado");
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en create()");
-            e.printStackTrace();
-        }
+        LOGGER.info("create() iniciado");
+
+        batch = new SpriteBatch();
+        actualizarProyeccionBatch(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        iniciarMusica();
+        mostrarMenu();
+
+        LOGGER.info("create() completado");
     }
 
     public void mostrarMenu() {
-        try {
-            System.out.println("MiJuegoPrincipal: mostrarMenu() llamado");
-            setScreen(new Menu(this));
-            System.out.println("MiJuegoPrincipal: Menu establecido");
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en mostrarMenu()");
-            e.printStackTrace();
-        }
+        cambiarPantalla(new Menu(this), "mostrarMenu");
     }
 
     public void mostrarSeleccionDificultad() {
-        try {
-            System.out.println("MiJuegoPrincipal: mostrarSeleccionDificultad() llamado");
-            setScreen(new PantallaSeleccionDificultad(this));
-            System.out.println("MiJuegoPrincipal: PantallaSeleccionDificultad establecida");
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en mostrarSeleccionDificultad()");
-            e.printStackTrace();
-        }
+        cambiarPantalla(new PantallaSeleccionDificultad(this), "mostrarSeleccionDificultad");
     }
 
     public void iniciarJuego() {
-        try {
-            System.out.println("MiJuegoPrincipal: iniciarJuego() llamado");
-            System.out.println("MiJuegoPrincipal: Dificultad seleccionada: " + dificultadSeleccionada);
-            setScreen(new JuegoScreen(this));
-            System.out.println("MiJuegoPrincipal: JuegoScreen establecido");
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en iniciarJuego()");
-            e.printStackTrace();
-        }
+        LOGGER.info("iniciarJuego() - dificultad: " + dificultadSeleccionada);
+        cambiarPantalla(new JuegoScreen(this), "iniciarJuego");
     }
 
     public void mostrarJuego() {
-        setScreen(new JuegoScreen(this));
+        cambiarPantalla(new JuegoScreen(this), "mostrarJuego");
     }
 
     public void mostrarMenuOnline() {
-        try {
-            setScreen(new OnlineMenuScreen(this));
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en mostrarMenuOnline()");
-            e.printStackTrace();
-        }
+        cambiarPantalla(new OnlineMenuScreen(this), "mostrarMenuOnline");
     }
 
     public void iniciarJuegoOnline(OnlineSession session, boolean host) {
@@ -80,33 +63,33 @@ public class MiJuegoPrincipal extends Game {
     }
 
     public void iniciarJuegoOnline(OnlineSession session, boolean host, Dificultad dificultadOnline) {
-        try {
-            Dificultad dificultad = dificultadOnline == null ? Dificultad.NORMAL : dificultadOnline;
-            setScreen(new OnlineJuegoScreen(this, session, host, dificultad));
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en iniciarJuegoOnline()");
-            e.printStackTrace();
-        }
+        Dificultad dificultad = dificultadOnline == null ? Dificultad.NORMAL : dificultadOnline;
+        cambiarPantalla(new OnlineJuegoScreen(this, session, host, dificultad), "iniciarJuegoOnline");
     }
 
     private void iniciarMusica() {
         try {
-            if (musica == null && Gdx.files.internal("Musicasnake.mp3").exists()) {
-                musica = Gdx.audio.newMusic(Gdx.files.internal("Musicasnake.mp3"));
-                musica.setLooping(true);
-                musica.setVolume(volumenMusica);
-                musica.play();
+            if (!Gdx.files.internal(MUSICA_RUTA).exists()) {
+                LOGGER.info("No se encontró el archivo de música: " + MUSICA_RUTA);
+                return;
             }
+
+            if (musica == null) {
+                musica = Gdx.audio.newMusic(Gdx.files.internal(MUSICA_RUTA));
+            }
+
+            musica.setLooping(true);
+            musica.setVolume(mute ? 0f : volumenMusica);
+            musica.play();
         } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR al iniciar música");
-            e.printStackTrace();
+            LOGGER.error("Error al iniciar música", e);
         }
     }
 
     public void setVolumenMusica(float volumen) {
-        volumenMusica = Math.max(0f, Math.min(1f, volumen));
-        if (!mute && musica != null) {
-            musica.setVolume(volumenMusica);
+        volumenMusica = Math.max(VOLUMEN_MIN, Math.min(VOLUMEN_MAX, volumen));
+        if (musica != null) {
+            musica.setVolume(mute ? 0f : volumenMusica);
         }
     }
 
@@ -130,19 +113,39 @@ public class MiJuegoPrincipal extends Game {
     }
 
     @Override
+    public void resize(int width, int height) {
+        super.resize(width, height);
+        actualizarProyeccionBatch(width, height);
+    }
+
+    @Override
     public void dispose() {
-        try {
-            System.out.println("MiJuegoPrincipal: dispose() llamado");
+        LOGGER.info("dispose() llamado");
+
+        if (batch != null) {
             batch.dispose();
-            if (musica != null) {
-                musica.dispose();
-                musica = null;
-            }
-        } catch (Exception e) {
-            System.err.println("MiJuegoPrincipal: ERROR en dispose()");
-            e.printStackTrace();
+            batch = null;
+        }
+
+        if (musica != null) {
+            musica.dispose();
+            musica = null;
         }
     }
 
+    private void actualizarProyeccionBatch(int width, int height) {
+        if (batch == null || width <= 0 || height <= 0) {
+            return;
+        }
+        batch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
+    }
 
+    private void cambiarPantalla(Screen pantalla, String origen) {
+        try {
+            setScreen(pantalla);
+            actualizarProyeccionBatch(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        } catch (Exception e) {
+            LOGGER.error("Error al cambiar pantalla desde " + origen, e);
+        }
+    }
 }

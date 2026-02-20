@@ -21,6 +21,9 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
+//Tiene tres secciones: la principal con los botones de jugar, opciones, controles, online y salir;
+//opciones con el control de volumen y mute; y controles con las teclas del juego.
+
 public class Menu implements Screen {
     private final MiJuegoPrincipal game;
     private Stage stage;
